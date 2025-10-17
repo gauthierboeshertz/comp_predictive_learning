@@ -1,2 +1,5 @@
 # comp_predictive_learning
-re
+conda create -n comp python=3.10
+conda activate comp
+
+pip3 install torch torchvision

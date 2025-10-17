@@ -1,0 +1,19 @@
+  num_pretrain_drawings_per_context: 512
+  num_val_drawings_per_context: 128
+  num_test_drawings_per_context: 128
+  colorize_white: False
+  canvas_size: 64
+  unit_length: 16
+  premake_videos: False
+  scales: [1]
+  colors: ["white","red","green","blue"]
+  symbol_timestep: 0
+  sequence_length: 6
+  noisy_in_quadrant_locations: False
+  contexts: [next_primitive_offset,next_color_offset,next_position_offset,next_scale_offset]
+  next_primitive_offset: [0,1,2,3,4,5]
+  # next_primitive_offset: [0,1,2]
+  next_scale_offset: [0]
+  next_color_offset: [0,1,2]
+  next_position_offset: [0,1,2]
+  name: sketch_${.sequence_length}/${.colors}/${.scales}/${.colorize_white}/${.scales}_${.num_pretrain_drawings_per_context}_${.num_val_drawings_per_context}_${.num_test_drawings_per_context}_${.canvas_size}_${.unit_length}/${.contexts}/${.next_primitive_offset}/${.next_scale_offset}/${.next_position_offset}/${.next_color_offset}

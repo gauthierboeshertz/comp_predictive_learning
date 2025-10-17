@@ -1,0 +1,7 @@
+_target_ : comp_predictive_learning.models.cnn_ae.CNNAE
+encoder_cfg:
+decoder_cfg:
+noise: 0
+activation: relu
+type: cnn_auto
+name:  cnn_ae_${.activation}_${.noise}

@@ -1,0 +1,9 @@
+  _target_: comp_predictive_learning.models.rnn.JitLeakyRNNLayer
+  input_dim: 
+  hidden_dim: 512
+  noise: 0.05
+  rnn_init: eye
+  activation: relu
+  leak_alpha: 1
+  mlp_dynamics: False
+  name: rnn_${.hidden_dim}_${.activation}_${.leak_alpha}_${.mlp_dynamics}_${.rnn_init}_${.noise}

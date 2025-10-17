@@ -1,0 +1,10 @@
+_target_: comp_predictive_learning.models.decoders.ConvDecoder
+
+input_dim: 
+hidden_dims: [64,32,16]
+output_dim: 3
+activation: relu
+norm_layer: none
+
+
+name: conv_${.hidden_dims}_${.activation}_${.norm_layer}
