@@ -1,4 +1,4 @@
-_target_: comp_predictive_learning.models.decoders.ConvDecoder
+_target_: compo_predictive_learning.models.decoders.ConvDecoder
 
 input_dim: 
 hidden_dims: [64,32,16]

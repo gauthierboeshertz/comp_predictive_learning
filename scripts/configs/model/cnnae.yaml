@@ -1,4 +1,4 @@
-_target_ : comp_predictive_learning.models.cnn_ae.CNNAE
+_target_ : compo_predictive_learning.models.cnn_ae.CNNAE
 encoder_cfg:
 decoder_cfg:
 noise: 0

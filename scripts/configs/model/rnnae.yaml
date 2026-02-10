@@ -1,4 +1,4 @@
-_target_ : comp_predictive_learning.models.rnn_ae.RNNAE
+_target_ : compo_predictive_learning.models.rnn_ae.RNNAE
 encoder_cfg:
 decoder_cfg:
 rnn_cfg: 

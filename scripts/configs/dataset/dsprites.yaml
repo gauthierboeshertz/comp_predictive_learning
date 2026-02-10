@@ -1,0 +1,32 @@
+
+
+num_train_sequences_per_context: 256
+num_val_sequences_per_context: 128
+contexts: [next_shape_offset,next_scale_offset,next_orientation_offset,next_posX_offset,next_posY_offset]
+
+next_shape_offset: [0,1,2]
+next_scale_offset: [0,1,2]
+next_orientation_offset: [0]
+# next_posX_offset: [0,2,4,8]
+# next_posY_offset: [0,2,4,8]
+next_posX_offset: [0,1,2]
+next_posY_offset: [0,1,2]
+
+# next_posY_offset: [0]
+
+one_posY: False
+one_posX: False
+one_scale: False
+one_shape: False
+one_orientation: True
+
+subsample_shape: 1
+subsample_scale: 0.5
+subsample_orientation: 1
+subsample_posX: 0.12
+subsample_posY: 0.12
+
+seq_len: 6
+task_disentanglement_num_timesteps: [1]
+path: /home/ghb24/comp_predictive_learning/data/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz
+name: dsprites_${.seq_len}/${.num_train_sequences_per_context}_${.num_val_sequences_per_context}/${.next_posX_offset}/${.next_posY_offset}/${.next_scale_offset}/${.next_shape_offset}/${.next_orientation_offset}/${.one_posX}_${.one_posY}${.one_scale}_${.one_shape}_${.one_orientation}_${.subsample_shape}_${.subsample_scale}_${.subsample_orientation}_${.subsample_posX}_${.subsample_posY}

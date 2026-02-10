@@ -1,4 +1,4 @@
-  _target_: comp_predictive_learning.models.rnn.JitLeakyRNNLayer
+  _target_: compo_predictive_learning.models.rnn.JitLeakyRNNLayer
   input_dim: 
   hidden_dim: 512
   noise: 0.05

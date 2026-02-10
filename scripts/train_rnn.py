@@ -7,13 +7,13 @@ from omegaconf import OmegaConf
 import torch 
 import numpy as np
 import random
-from comp_predictive_learning.models import create_model
+from compo_predictive_learning.models import create_model
 import hydra
 import logging
 from collections import defaultdict
-from comp_predictive_learning.datasets import make_sketch_dataloaders
-from comp_predictive_learning.utils.train_loop import train_loop
-from comp_predictive_learning.utils.make_all_plots import make_all_plots
+from compo_predictive_learning.datasets import make_dsprites_dataloaders, make_sketch_dataloaders
+from compo_predictive_learning.utils.train_loop import train_loop
+from compo_predictive_learning.utils.make_all_plots import make_all_plots
 logger = logging.getLogger(__name__)
 
 def set_seed(seed=0):
@@ -55,7 +55,13 @@ def get_activity_and_context(config,model,loader,subsample_activites=0):
 def main(config):
 
     set_seed(config.seed)   
-    pretrain_loader,val_loader, smaller_pretrain_loader,analysis_loader,classification_metric_train_loaders, classification_metric_val_loaders,latent_names, train_contexts,val_contexts = make_sketch_dataloaders(config)
+    if "sketch" in config.dataset.name:
+        pretrain_loader,val_loader, smaller_pretrain_loader,analysis_loader,classification_metric_train_loaders, classification_metric_val_loaders,latent_names, train_contexts,val_contexts = make_sketch_dataloaders(config)
+    
+    elif "dsprites" in config.dataset.name:
+        pretrain_loader, val_loader, smaller_pretrain_loader,analysis_loader ,classification_metric_train_loaders, classification_metric_val_loaders,latent_names, train_contexts,val_contexts = make_dsprites_dataloaders(config)
+    else:
+        raise NotImplementedError(f"Dataset {config.dataset.name} not implemented")
     
     all_contexts = train_contexts + val_contexts
 

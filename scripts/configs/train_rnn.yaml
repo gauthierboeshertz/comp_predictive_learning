@@ -1,11 +1,11 @@
 defaults:
   - model: rnnae
-  - dataset: sketch
+  - dataset: dsprites
   - rnn: leaky_rnn
 
 
 encoder:
-  _target_: comp_predictive_learning.models.encoders.ConvEncoder
+  _target_: compo_predictive_learning.models.encoders.ConvEncoder
   input_dim: 
   hidden_dims: [16,16,16]
   output_dim: 512
@@ -15,7 +15,7 @@ encoder:
   name: conv_${.hidden_dims}_${.activation}_${.norm_layer}_${.max_pooling}_${.output_dim}
 
 decoder:
-  _target_: comp_predictive_learning.models.decoders.ConvDecoder
+  _target_: compo_predictive_learning.models.decoders.ConvDecoder
   input_dim: 
   hidden_dims: [16,16,16]
   output_dim: 
