@@ -234,7 +234,6 @@ class SketchDataset(torch.utils.data.Dataset):
         self.scales = scales
         self.all_primitives = self.create_primitives()
         self.primitive_names = list(self.all_primitives.keys())
-        print(f"Using primitives: {self.primitive_names}")
         self.premake_videos = premake_videos
         self.final_images = []
         self.primitive_sequences = []
@@ -265,7 +264,6 @@ class SketchDataset(torch.utils.data.Dataset):
                                 
                 self.drawings_metadata.append(metadata)
                 self.drawing_lengths.append(len(metadata))
-            print(f"Generated {len(self.drawings_metadata)} random drawings.")
                     
         elif task_disentanglement:
             self.drawings_metadata = generate_disentanglement_task_metadata(
@@ -278,7 +276,6 @@ class SketchDataset(torch.utils.data.Dataset):
                 train_set=task_disentanglement_train_set,
                 all_contexts=task_disentanglement_contexts)
             
-            print(f"Generated {len(self.drawings_metadata)} disentanglement task drawings.")
         
     def __len__(self):
         return len(self.drawings_metadata)
@@ -447,7 +444,6 @@ def make_sketch_loader(config,
         return datasets, None  
     
     context_vectors = torch.stack(context_vectors)
-    print("Contexts: ",context_vectors)
     return datasets, context_vectors
 
 

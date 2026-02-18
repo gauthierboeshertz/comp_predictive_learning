@@ -1,6 +1,6 @@
 defaults:
   - model: rnnae
-  - dataset: dsprites
+  - dataset: sketch
   - rnn: leaky_rnn
 
 
@@ -52,9 +52,9 @@ train_loop:
     pretrain_act_l1: 0
     pretrain_weight_l1: 0
     batch_size: 128
-    save_model_every: 100000
+    save_model_every: 100000000
 
 hydra:
     run:
         # dir: outputs/contextual_${support_type}_${support_connectivity}_${subsample_contexts_ratio}/${dataset.name}/${model.name}/${encoder.name}/${rnn.name}/${decoder.name}/${one_context_per_batch}/${train_loop.num_steps}_${train_loop.pretrain_lr}_${train_loop.pretrain_decay}_${train_loop.pretrain_act_decay}_${train_loop.pretrain_act_l1}_${train_loop.pretrain_weight_l1}_${train_loop.batch_size}/seed${seed}
-        dir: test/contextual_${support_type}_${support_connectivity}_${subsample_contexts_ratio}/${dataset.name}/${model.name}/${encoder.name}/${rnn.name}/${decoder.name}/${one_context_per_batch}/${train_loop.num_steps}_${train_loop.pretrain_lr}_${train_loop.pretrain_decay}_${train_loop.pretrain_act_decay}_${train_loop.pretrain_act_l1}_${train_loop.pretrain_weight_l1}_${train_loop.batch_size}/seed${seed}
+        dir: revieww/contextual_${support_type}_${support_connectivity}_${subsample_contexts_ratio}/${dataset.name}/${model.name}/${encoder.name}/${rnn.name}/${decoder.name}/${one_context_per_batch}/${train_loop.num_steps}_${train_loop.pretrain_lr}_${train_loop.pretrain_decay}_${train_loop.pretrain_act_decay}_${train_loop.pretrain_act_l1}_${train_loop.pretrain_weight_l1}_${train_loop.batch_size}/seed${seed}

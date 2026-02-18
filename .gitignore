@@ -27,6 +27,7 @@ MANIFEST
 
 outputs/ 
 test/
+review/
 
 
 *.manifest

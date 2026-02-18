@@ -22,7 +22,8 @@ class RNNAE(nn.Module):
         self.decoder = hydra.utils.instantiate(decoder_cfg)
         self.type = type
         self.loss_fn = self.new_loss_fn()
-        self.activation = nn.Identity()         
+        self.activation = nn.Identity()   
+        self.pred_offset = 1      
         
     def forward(self, input:Tensor):
         # type: (Tensor,Tensor) -> Tuple[List[Tensor],Tensor]
@@ -33,11 +34,16 @@ class RNNAE(nn.Module):
     def loss(self, data):
         outputs,cnn_encoded,rnn_out,enc_context = self(data)
         if self.type == "pred":
-            context_offset = 1
-            labels = data[context_offset+1:]
-            outputs = outputs[context_offset:-1]
+            context_offset = 1 #time needed for the model to integrate inputs and know the context
+            labels = data[context_offset+self.pred_offset:]
+            outputs = outputs[context_offset:-self.pred_offset]
+        elif self.type == "mem":
+            # pred offset is positive still but in the past
+            labels = data[:-self.pred_offset]
+            outputs = outputs[self.pred_offset:]
         else:
             labels = data
+            
         loss = self.loss_fn(outputs,labels)
                 
         return loss, cnn_encoded,rnn_out,enc_context
