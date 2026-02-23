@@ -231,6 +231,85 @@ def write_combinations_for_slurm_greene(file_path,
 
     return combinations
 
+import os
+
+def write_combinations_for_qsub_stdin(qsub_submit_file_path,
+                                      qsub_headers,
+                                      param_dicts,
+                                      command,
+                                      combination_style="hydra",
+                                      extra_body_lines=None,
+                                      pass_env=True):
+    """
+    Writes a *submission script* containing `qsub <<'PBS' ... PBS` blocks
+    (i.e. qsub reads the job script from stdin; no .pbs file is created).
+
+    Outputs:
+      1) <name>_combinations.txt: one line per combination (Hydra/argparse args)
+      2) qsub_submit_file_path: a shell script you run (bash ...) to submit the array job
+
+    Args:
+        qsub_submit_file_path (str): where to write the submission shell script (e.g. submit_jobs.sh)
+        qsub_headers (list[str]): PBS headers like "#PBS -l walltime=..." (do NOT include -J; added here)
+        param_dicts (list[dict] or list of dict-of-lists): parameter grids
+        command (str): base command, e.g. "python train.py"
+        combination_style (str): "hydra" or "argparse"
+        extra_body_lines (list[str] | None): optional extra lines in the PBS body (module load, cd, etc.)
+        pass_env (bool): if True, add qsub -V (export current env into job)
+    """
+    # ---- build combinations ----
+    combinations = []
+    for pd in param_dicts:
+        combinations.extend(make_combinations(pd))
+
+    # ---- write combinations file ----
+    base = os.path.splitext(os.path.basename(qsub_submit_file_path))[0]
+    combos_path = os.path.join(os.path.dirname(qsub_submit_file_path), f"{base}_combinations.txt")
+
+    with open(combos_path, "w") as f:
+        for param_dict in combinations:
+            f.write(make_combination_string(param_dict, style=combination_style) + "\n")
+
+    # ---- build PBS headers (add array) ----
+    headers = list(qsub_headers)
+    headers.append(f"#PBS -J 1-{len(combinations)}")
+
+    # ---- body: pick args for this array index + run ----
+    body_lines = []
+    # (optional but common) run from submission dir if PBS_O_WORKDIR exists
+    body_lines.append('cd "${PBS_O_WORKDIR:-$PWD}"')
+
+    if extra_body_lines:
+        body_lines.extend(extra_body_lines)
+
+    # fetch the correct line for this array index
+    body_lines.append(f'ARGS="$(sed -n \\"${{PBS_ARRAY_INDEX}}p\\" {combos_path})"')
+    body_lines.append(f'{command} $ARGS')
+
+    # ---- write a submission shell script that submits via stdin here-doc ----
+    # You run: bash submit_jobs.sh
+    qsub_cmd = "qsub"
+    if pass_env:
+        qsub_cmd += " -V"
+
+    with open(qsub_submit_file_path, "w") as f:
+        f.write("#!/bin/bash\nset -euo pipefail\n\n")
+        f.write(f"{qsub_cmd} <<'PBS'\n")
+        for h in headers:
+            f.write(h + "\n")
+        f.write("\n")
+        for line in body_lines:
+            f.write(line + "\n")
+        f.write("PBS\n")
+
+    # make it executable (nice-to-have)
+    try:
+        os.chmod(qsub_submit_file_path, 0o755)
+    except Exception:
+        pass
+
+    return combinations
+
 def write_combinations_for_qsub(qsub_file_path,
                                 qsub_headers,
                                 param_dicts,
@@ -273,12 +352,97 @@ def write_combinations_for_qsub(qsub_file_path,
 
     return combinations
 
+
+def write_combinations_for_qsub_stdin_one_per_combo(
+    qsub_submit_file_path,
+    qsub_headers,
+    param_dicts,
+    command,
+    combination_style="hydra",
+    extra_body_lines=None,
+    pass_env=True,
+    job_name_prefix=None,
+    throttle_sleep_seconds=0,
+):
+    """
+    Writes a *submission script* with one `qsub <<'PBS' ... PBS` block per combo.
+
+    Output:
+      - qsub_submit_file_path: a shell script you run (bash ...) to submit all jobs
+
+    Args:
+        qsub_submit_file_path (str): e.g. "submit_jobs.sh"
+        qsub_headers (list[str]): PBS headers (#!/bin/bash, #PBS -l ..., #PBS -o..., #PBS -e...)
+                                  If you want distinct names, do NOT include #PBS -N here; this function adds it.
+        param_dicts: dict-of-lists OR list of dict-of-lists (your existing grids)
+        command (str): base command, e.g. "python train.py"
+        combination_style (str): "hydra" or "argparse"
+        extra_body_lines (list[str] | None): module loads, conda activate, cd, etc.
+        pass_env (bool): if True, submit with `qsub -V`
+        job_name_prefix (str | None): if provided, sets #PBS -N <prefix>_<i>
+        throttle_sleep_seconds (int): sleep between submissions to avoid hammering scheduler
+    """
+    # ---- build combinations ----
+    combinations = []
+    if isinstance(param_dicts, dict):
+        combinations.extend(make_combinations(param_dicts))
+    else:
+        assert isinstance(param_dicts, (list, tuple)), "param_dicts should be a dict or list/tuple of dicts"
+        for pd in param_dicts:
+            combinations.extend(make_combinations(pd))
+
+    qsub_cmd = "qsub" + (" -V" if pass_env else "")
+
+    with open(qsub_submit_file_path, "w") as f:
+        f.write("#!/bin/bash\nset -euo pipefail\n\n")
+
+        for i, combo in enumerate(combinations, start=1):
+            args = make_combination_string(combo, style=combination_style)
+
+            f.write(f"{qsub_cmd} <<'PBS'\n")
+
+            # Headers (strip array + name if present; we add name optionally)
+            for h in qsub_headers:
+                hs = h.strip()
+                if hs.startswith("#PBS -J"):
+                    continue
+                if hs.startswith("#PBS -N"):
+                    continue
+                f.write(h + "\n")
+
+            # Optional per-job name
+            if job_name_prefix is not None:
+                f.write(f"#PBS -N {job_name_prefix}_{i}\n")
+
+            f.write("\n")
+
+            # Body
+            f.write('cd "${PBS_O_WORKDIR:-$PWD}"\n')
+            if extra_body_lines:
+                for line in extra_body_lines:
+                    f.write(line + "\n")
+
+            # Run command for this combo
+            f.write(f"{command} {args}\n")
+            f.write("PBS\n\n")
+
+            if throttle_sleep_seconds and throttle_sleep_seconds > 0:
+                f.write(f"sleep {int(throttle_sleep_seconds)}\n\n")
+
+    # # make executable (nice-to-have)
+    # try:
+    #     os.chmod(qsub_submit_file_path, 0o755)
+    # except Exception:
+    #     pass
+
+    return combinations
+
 def make_qsub_headers(walltime="24:00:00",
                     ncpu=1,
                     ngpu=1,
                     mem="4gb",
-                    output_file="my_job_output.txt",
-                    error_file="my_job_error.txt"):
+                    output_file=None,
+                    error_file=None):
     
     """
     Generate a list of typical qsub headers.
@@ -290,8 +454,8 @@ def make_qsub_headers(walltime="24:00:00",
         "#!/bin/bash",
         f"#PBS -l walltime={walltime}",
         f"#PBS -l select=1:ncpus={ncpu}:mem={mem}gb:ngpus={ngpu}:gpu_type=RTX6000",
-        f"#PBS -o {output_file}",
-        f"#PBS -e {error_file}"]
+        f"#PBS -o {output_file}" if output_file else "",
+        f"#PBS -e {error_file}" if error_file else "",]
     
     return qsub_headers
 

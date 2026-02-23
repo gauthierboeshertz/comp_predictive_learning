@@ -3,7 +3,10 @@ from sklearn.svm import LinearSVC
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def unpack_batch(batch):
-    prim_sequence_inputs, latents = batch
+    if len(batch) == 3:
+        prim_sequence_inputs, latents, contexts = batch
+    else:   
+        prim_sequence_inputs, latents = batch
     prim_sequence_inputs = prim_sequence_inputs.transpose(0,1).to(DEVICE)
     latents = latents.transpose(0,1).to(DEVICE)
     return prim_sequence_inputs, latents

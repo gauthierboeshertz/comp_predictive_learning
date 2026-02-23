@@ -6,6 +6,7 @@ from .contextual_sketch import make_sketch_loader,make_contextual_sketch_collate
 from .contextual_sketch import make_dataset as make_dataset_contextual_sketch
 from .structured_context_generator import create_structured_contexts
 from .dsprites import make_DSprites_loader, make_DSprites_collate_fn, load_raw as load_raw_dsprites,make_dataset as make_dataset_contextual_dsprites, TransitionDSprites
+from .dddshapes import make_DDDShapes_collate_fn, make_dataset as make_dataset_contextual_dddshapes, TransitionShapes3D, load_raw as load_raw_dddshapes, make_dddshapes_loader
 
 def worker_init_fn(worker_id):                                                                                                                                
     seed = 0                
@@ -43,7 +44,18 @@ def make_contextual_loader(config,
                                                          factor_classes= kwargs.get("factor_classes",None))
          
         collate_fn = make_DSprites_collate_fn("cuda" if torch.cuda.is_available() else "cpu")
-
+    elif "dddshapes" in config.dataset.name:
+        datasets,context_vectors = make_dddshapes_loader(config,
+                                                         context_vals,
+                                                         context_vector_size,
+                                                         context_start_idx,
+                                                         num_sample_per_context,
+                                                         put_in_dict,
+                                                         imgs = kwargs.get("imgs",None),
+                                                         factor_values= kwargs.get("factor_values",None),
+                                                         factor_classes= kwargs.get("factor_classes",None))
+        
+        collate_fn = make_DDDShapes_collate_fn("cuda" if torch.cuda.is_available() else "cpu")
     else:
         raise ValueError(f"Dataset {config.dataset.name} not supported.")
     
@@ -202,3 +214,109 @@ def make_dsprites_dataloaders(config):
     
     return pretrain_loader, val_loader, smaller_pretrain_loader,analysis_loader ,classification_metric_train_loaders, classification_metric_val_loaders,latents, train_contexts,val_contexts
 
+
+import torch
+
+def make_dddshapes_dataloaders(config):
+    train_contexts, val_contexts = create_structured_contexts(config)
+
+    ddd_imgs, factor_values, factor_classes = load_raw_dddshapes(config.dataset.path)  # 3DShapes loader
+    # context_size should match how you encode contexts (same role as dsprites' context_size=3)
+    context_size = len(config.dataset.contexts)
+
+    pretrain_loader = make_contextual_loader(
+        config,
+        train_contexts,
+        config.dataset.num_train_sequences_per_context,
+        context_size,
+        0,
+        infinite_stream=True,
+        shuffle=True,
+        imgs=ddd_imgs,
+        factor_values=factor_values,
+        factor_classes=factor_classes
+    )
+
+    val_loader = make_contextual_loader(
+        config,
+        val_contexts,
+        config.dataset.num_val_sequences_per_context,
+        context_size,
+        len(train_contexts),
+        shuffle=False,
+        imgs=ddd_imgs,
+        factor_values=factor_values,
+        factor_classes=factor_classes
+    )
+
+    smaller_pretrain_loader = make_contextual_loader(
+        config,
+        train_contexts,
+        config.train_loop.batch_size,
+        context_size,
+        0,
+        shuffle=False,
+        imgs=ddd_imgs,
+        factor_values=factor_values,
+        factor_classes=factor_classes
+    )
+
+    # --- abstract loaders (disentanglement/classification metrics), dsprites-style ---
+    def make_abstract_loader(train_or_val, test_latent):
+        ds = make_dataset_contextual_dddshapes(
+            1,
+            config,
+            imgs=ddd_imgs,
+            factor_values=factor_values,
+            factor_classes=factor_classes,
+            task_abstract=True,
+            task_abstract_train_set=train_or_val,
+            task_abstract_latent=test_latent,
+        )
+        loader = torch.utils.data.DataLoader(
+            ds,
+            batch_size=config.train_loop.batch_size,
+            num_workers=0,
+            shuffle=False,
+            pin_memory=False
+        )
+        return loader
+
+    # Build list of latents that are not "one_*"
+    # (your config uses one_floor/one_wall/one_object, but factors are floor_hue/wall_hue/object_hue)
+    one_flag_by_factor = {
+        "shape": getattr(config.dataset, "one_shape", False),
+        "floor_hue": getattr(config.dataset, "one_floor", False),
+        "wall_hue": getattr(config.dataset, "one_wall", False),
+        "object_hue": getattr(config.dataset, "one_object", False),
+        "scale": getattr(config.dataset, "one_scale", False),
+        "orientation": getattr(config.dataset, "one_orientation", False),
+    }
+
+    latents = [lat for lat in TransitionShapes3D.factors if not one_flag_by_factor.get(lat, False)]
+    latents_idx = {lat: idx for idx, lat in enumerate(TransitionShapes3D.factors)}
+
+    print("Latents for 3DShapes disentanglement:", latents, latents_idx)
+
+    classification_metric_train_loaders = {}
+    classification_metric_val_loaders = {}
+    for lat in latents:
+        lat_idx = latents_idx[lat]
+        classification_metric_train_loaders[lat] = (make_abstract_loader(True, lat), lat_idx)
+        classification_metric_val_loaders[lat] = (make_abstract_loader(False, lat), lat_idx)
+
+    all_contexts = train_contexts + val_contexts
+
+    analysis_loader = make_contextual_loader(
+        config=config,
+        dataset_name="3dshapes",
+        context_vals=all_contexts,
+        num_sample_per_context=128,
+        context_vector_size=context_size,
+        context_start_idx=0,
+        shuffle=False
+    )
+
+    return (pretrain_loader, val_loader, smaller_pretrain_loader, analysis_loader,
+            classification_metric_train_loaders, classification_metric_val_loaders,
+            latents, train_contexts, val_contexts)

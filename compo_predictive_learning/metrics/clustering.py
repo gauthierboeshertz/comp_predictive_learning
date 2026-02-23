@@ -210,98 +210,232 @@ def create_context_activity_map(cluster_profiles,
             context_activity_map[context_tuple].append(int(cluster_id))
             
     return context_activity_map
-def analyze_and_sort_clusters(norm_var_activities_per_context,
-                              contexts_unique,
-                              labels,
-                              selectivity_threshold=0.5,
-                              purity_threshold=0.90):
 
-    if isinstance(norm_var_activities_per_context, torch.Tensor):
-        norm_var_activities_per_context = norm_var_activities_per_context.cpu().numpy()
-    if isinstance(contexts_unique, torch.Tensor):
-        contexts_unique = contexts_unique.cpu().numpy()
-    if isinstance(labels, torch.Tensor):
-        labels = labels.cpu().numpy()
 
-    flat_labels = labels.flatten()
-    n_clusters = len(np.unique(flat_labels))
-    n_contexts = norm_var_activities_per_context.shape[1]
-    cluster_profiles = np.zeros((n_clusters, n_contexts))
-    for i in range(n_clusters):
-        neurons_in_cluster = np.where(flat_labels == i)[0]
-        if len(neurons_in_cluster) > 0:
-            cluster_profiles[i, :] = norm_var_activities_per_context[neurons_in_cluster, :].mean(axis=0)
+# def analyze_and_sort_clusters(norm_var_activities_per_context,
+#                               contexts_unique,
+#                               labels,
+#                               selectivity_threshold=0.5,
+#                               purity_threshold=0.90):
 
-    peak_activity = cluster_profiles.max(axis=1)
-    sum_activity = cluster_profiles.sum(axis=1)
-    mean_other_activity = (sum_activity - peak_activity) / (n_contexts - 1)
-    epsilon = 1e-9
-    selectivity_scores = (peak_activity - mean_other_activity) / (peak_activity + mean_other_activity + epsilon)
+#     if isinstance(norm_var_activities_per_context, torch.Tensor):
+#         norm_var_activities_per_context = norm_var_activities_per_context.cpu().numpy()
+#     if isinstance(contexts_unique, torch.Tensor):
+#         contexts_unique = contexts_unique.cpu().numpy()
+#     if isinstance(labels, torch.Tensor):
+#         labels = labels.cpu().numpy()
 
-    informative_indices = np.where(selectivity_scores > selectivity_threshold)[0]
-    non_selective_indices = np.where(selectivity_scores <= selectivity_threshold)[0]
-    non_selective_indices.sort()
+#     flat_labels = labels.flatten()
+#     n_clusters = len(np.unique(flat_labels))
+#     n_contexts = norm_var_activities_per_context.shape[1]
+#     cluster_profiles = np.zeros((n_clusters, n_contexts))
+#     for i in range(n_clusters):
+#         neurons_in_cluster = np.where(flat_labels == i)[0]
+#         if len(neurons_in_cluster) > 0:
+#             cluster_profiles[i, :] = norm_var_activities_per_context[neurons_in_cluster, :].mean(axis=0)
 
-    context_to_peak_clusters_map = {}
-    if len(informative_indices) > 0:
-        informative_profiles = cluster_profiles[informative_indices]
-        peak_context_indices = np.argmax(informative_profiles, axis=1)
-        for i, cluster_id in enumerate(informative_indices):
-            peak_ctx_idx = peak_context_indices[i]
-            peak_ctx_vector = contexts_unique[peak_ctx_idx]
-            peak_ctx_tuple = tuple(peak_ctx_vector)
-            if peak_ctx_tuple not in context_to_peak_clusters_map:
-                context_to_peak_clusters_map[peak_ctx_tuple] = []
-            context_to_peak_clusters_map[peak_ctx_tuple].append(int(cluster_id))
+#     peak_activity = cluster_profiles.max(axis=1)
+#     sum_activity = cluster_profiles.sum(axis=1)
+#     mean_other_activity = (sum_activity - peak_activity) / (n_contexts - 1)
+#     epsilon = 1e-9
+#     selectivity_scores = (peak_activity - mean_other_activity) / (peak_activity + mean_other_activity + epsilon)
 
-    sorted_informative_clusters = []
-    group_boundaries_by_cluster_count = []
-    group_labels = []
-    if len(informative_indices) > 0:
-        unassigned_mask = np.ones(len(informative_indices), dtype=bool)
-        ctx_order_y = np.lexsort(tuple(contexts_unique[:, i] for i in range(contexts_unique.shape[1] - 1, -1, -1)))
-        y_pos = np.empty_like(ctx_order_y); y_pos[ctx_order_y] = np.arange(len(ctx_order_y))
-        for dim in range(contexts_unique.shape[1]):
-            current_indices_map = np.where(unassigned_mask)[0]
-            if len(current_indices_map) == 0: break
-            current_profiles = cluster_profiles[informative_indices[current_indices_map]]
-            dim_vals = contexts_unique[:, dim]
-            unique_dim_vals = np.unique(dim_vals)
-            is_pure_for_dim = []
-            for profile in current_profiles:
-                total_variance = np.var(profile)
-                if total_variance < epsilon:
-                    is_pure_for_dim.append(False); continue
-                residual_variance = np.mean([np.var(profile[dim_vals == v]) for v in unique_dim_vals])
-                variance_explained = 1 - (residual_variance / total_variance)
-                is_pure_for_dim.append(variance_explained > purity_threshold)
-            pure_mask = np.array(is_pure_for_dim)
-            if np.any(pure_mask):
-                pure_indices_original = informative_indices[current_indices_map[pure_mask]]
-                pure_profiles = cluster_profiles[pure_indices_original]
-                sort_key1 = [unique_dim_vals[np.argmax([p[dim_vals == v].sum() for v in unique_dim_vals])] for p in pure_profiles]
-                sort_key2 = y_pos[np.argmax(pure_profiles, axis=1)]
-                sorted_indices = np.lexsort((sort_key2, sort_key1))
-                sorted_informative_clusters.extend(pure_indices_original[sorted_indices])
-                group_boundaries_by_cluster_count.append(len(sorted_informative_clusters))
-                group_labels.append(f"C{dim}")
-                unassigned_mask[current_indices_map[pure_mask]] = False
-        mixed_indices_map = np.where(unassigned_mask)[0]
+#     informative_indices = np.where(selectivity_scores > selectivity_threshold)[0]
+#     non_selective_indices = np.where(selectivity_scores <= selectivity_threshold)[0]
+#     non_selective_indices.sort()
+
+#     context_to_peak_clusters_map = {}
+#     if len(informative_indices) > 0:
+#         informative_profiles = cluster_profiles[informative_indices]
+#         peak_context_indices = np.argmax(informative_profiles, axis=1)
+#         for i, cluster_id in enumerate(informative_indices):
+#             peak_ctx_idx = peak_context_indices[i]
+#             peak_ctx_vector = contexts_unique[peak_ctx_idx]
+#             peak_ctx_tuple = tuple(peak_ctx_vector)
+#             if peak_ctx_tuple not in context_to_peak_clusters_map:
+#                 context_to_peak_clusters_map[peak_ctx_tuple] = []
+#             context_to_peak_clusters_map[peak_ctx_tuple].append(int(cluster_id))
+
+#     sorted_informative_clusters = []
+#     group_boundaries_by_cluster_count = []
+#     group_labels = []
+#     if len(informative_indices) > 0:
+#         unassigned_mask = np.ones(len(informative_indices), dtype=bool)
+#         ctx_order_y = np.lexsort(tuple(contexts_unique[:, i] for i in range(contexts_unique.shape[1] - 1, -1, -1)))
+#         y_pos = np.empty_like(ctx_order_y); y_pos[ctx_order_y] = np.arange(len(ctx_order_y))
+#         for dim in range(contexts_unique.shape[1]):
+#             current_indices_map = np.where(unassigned_mask)[0]
+#             if len(current_indices_map) == 0: break
+#             current_profiles = cluster_profiles[informative_indices[current_indices_map]]
+#             dim_vals = contexts_unique[:, dim]
+#             unique_dim_vals = np.unique(dim_vals)
+#             is_pure_for_dim = []
+#             for profile in current_profiles:
+#                 total_variance = np.var(profile)
+#                 if total_variance < epsilon:
+#                     is_pure_for_dim.append(False); continue
+#                 residual_variance = np.mean([np.var(profile[dim_vals == v]) for v in unique_dim_vals])
+#                 variance_explained = 1 - (residual_variance / total_variance)
+#                 is_pure_for_dim.append(variance_explained > purity_threshold)
+#             pure_mask = np.array(is_pure_for_dim)
+#             if np.any(pure_mask):
+#                 pure_indices_original = informative_indices[current_indices_map[pure_mask]]
+#                 pure_profiles = cluster_profiles[pure_indices_original]
+#                 sort_key1 = [unique_dim_vals[np.argmax([p[dim_vals == v].sum() for v in unique_dim_vals])] for p in pure_profiles]
+#                 sort_key2 = y_pos[np.argmax(pure_profiles, axis=1)]
+#                 sorted_indices = np.lexsort((sort_key2, sort_key1))
+#                 sorted_informative_clusters.extend(pure_indices_original[sorted_indices])
+#                 group_boundaries_by_cluster_count.append(len(sorted_informative_clusters))
+#                 group_labels.append(f"C{dim}")
+#                 unassigned_mask[current_indices_map[pure_mask]] = False
+#         mixed_indices_map = np.where(unassigned_mask)[0]
         
-        if len(mixed_indices_map) > 0:
-            mixed_indices_original = informative_indices[mixed_indices_map]
-            non_selective_indices = list(non_selective_indices) + list(mixed_indices_original)
+#         if len(mixed_indices_map) > 0:
+#             mixed_indices_original = informative_indices[mixed_indices_map]
+#             non_selective_indices = list(non_selective_indices) + list(mixed_indices_original)
 
 
-    final_cluster_order = sorted_informative_clusters + list(non_selective_indices)
-    if len(non_selective_indices) > 0:
-        group_boundaries_by_cluster_count.append(len(final_cluster_order))
+#     final_cluster_order = sorted_informative_clusters + list(non_selective_indices)
+#     if len(non_selective_indices) > 0:
+#         group_boundaries_by_cluster_count.append(len(final_cluster_order))
+#         group_labels.append("Non-Selective")
+
+#     return (final_cluster_order, group_labels, group_boundaries_by_cluster_count,
+#             context_to_peak_clusters_map, informative_indices, cluster_profiles)
+    
+import numpy as np
+
+def analyze_and_sort_clusters(
+    norm_var_activities_per_context,
+    contexts_unique,
+    labels,
+    selectivity_threshold=0.5,
+    purity_threshold=0.90,
+    eps=1e-9,
+):
+    """
+    Simplified version of analyze_and_sort_clusters.
+
+    Returns:
+      final_cluster_order
+      group_labels
+      group_boundaries_by_cluster_count
+      context_to_peak_clusters_map
+      informative_indices
+      cluster_profiles
+    """
+
+    # --- to numpy ---
+    if hasattr(norm_var_activities_per_context, "detach"):
+        norm_var_activities_per_context = norm_var_activities_per_context.detach().cpu().numpy()
+    if hasattr(contexts_unique, "detach"):
+        contexts_unique = contexts_unique.detach().cpu().numpy()
+    if hasattr(labels, "detach"):
+        labels = labels.detach().cpu().numpy()
+
+    flat_labels = labels.reshape(-1)
+    n_contexts = norm_var_activities_per_context.shape[1]
+
+    # --- cluster profiles: mean over neurons in each cluster ---
+    n_clusters = int(np.max(flat_labels)) + 1
+    cluster_profiles = np.zeros((n_clusters, n_contexts), dtype=float)
+    for c in range(n_clusters):
+        idx = np.where(flat_labels == c)[0]
+        if idx.size:
+            cluster_profiles[c] = norm_var_activities_per_context[idx].mean(axis=0)
+
+    # --- selectivity scores (same idea as your original) ---
+    peak = cluster_profiles.max(axis=1)
+    s = cluster_profiles.sum(axis=1)
+    mean_other = (s - peak) / max(n_contexts - 1, 1)
+    selectivity = (peak - mean_other) / (peak + mean_other + eps)
+
+    informative_indices = np.where(selectivity > selectivity_threshold)[0]
+    non_selective_indices = np.where(selectivity <= selectivity_threshold)[0]
+
+    # --- map: peak context -> clusters (informative only) ---
+    context_to_peak_clusters_map = {}
+    if informative_indices.size:
+        peak_ctx_idx = np.argmax(cluster_profiles[informative_indices], axis=1)
+        for cid, ctx_i in zip(informative_indices, peak_ctx_idx):
+            key = tuple(contexts_unique[ctx_i])
+            context_to_peak_clusters_map.setdefault(key, []).append(int(cid))
+
+    # --- helper: "purity" for a cluster w.r.t. a context dimension ---
+    def variance_explained_by_dim(profile, dim_vals):
+        total = np.var(profile)
+        if total < eps:
+            return 0.0
+        uniq = np.unique(dim_vals)
+        resid = np.mean([np.var(profile[dim_vals == v]) for v in uniq])
+        return 1.0 - (resid / (total + eps))
+
+    # Context y-order (same ordering trick you use later in plotting)
+    ctx_order_y = np.lexsort(
+        tuple(contexts_unique[:, i] for i in range(contexts_unique.shape[1] - 1, -1, -1))
+    )
+    y_pos = np.empty_like(ctx_order_y)
+    y_pos[ctx_order_y] = np.arange(len(ctx_order_y))
+
+    # --- assign each informative cluster to the FIRST dimension that is "pure" ---
+    n_dims = contexts_unique.shape[1]
+    groups = {d: [] for d in range(n_dims)}
+    mixed = []
+
+    for cid in informative_indices:
+        p = cluster_profiles[cid]
+        assigned = False
+        for d in range(n_dims):
+            dim_vals = contexts_unique[:, d]
+            if variance_explained_by_dim(p, dim_vals) > purity_threshold:
+                groups[d].append(int(cid))
+                assigned = True
+                break
+        if not assigned:
+            mixed.append(int(cid))
+
+    # --- sort clusters within each pure group (keeps your spirit, but simpler) ---
+    sorted_informative = []
+    group_boundaries = []
+    group_labels = []
+
+    for d in range(n_dims):
+        cids = groups[d]
+        if not cids:
+            continue
+
+        dim_vals = contexts_unique[:, d]
+        uniq_vals = np.unique(dim_vals)
+
+        key1 = []
+        key2 = []
+
+        for cid in cids:
+            p = cluster_profiles[cid]
+            best_val = uniq_vals[np.argmax([p[dim_vals == v].sum() for v in uniq_vals])]
+            key1.append(best_val)
+            key2.append(y_pos[int(np.argmax(p))])
+
+        order = np.lexsort((np.array(key2), np.array(key1)))
+        sorted_informative.extend([cids[i] for i in order])
+        group_boundaries.append(len(sorted_informative))
+        group_labels.append(f"C{d}")
+
+    non_selective = np.array(sorted(list(non_selective_indices) + mixed), dtype=int)
+
+    final_cluster_order = list(sorted_informative) + list(non_selective)
+    if non_selective.size:
+        group_boundaries.append(len(final_cluster_order))
         group_labels.append("Non-Selective")
 
-    return (final_cluster_order, group_labels, group_boundaries_by_cluster_count,
-            context_to_peak_clusters_map, informative_indices, cluster_profiles)
-    
-
+    return (
+        final_cluster_order,
+        group_labels,
+        group_boundaries,
+        context_to_peak_clusters_map,
+        informative_indices,
+        cluster_profiles,
+    )
 
 def plot_sequentially_sorted_clusters(norm_var_activities_per_context,
                                       contexts_unique,
@@ -343,7 +477,7 @@ def plot_sequentially_sorted_clusters(norm_var_activities_per_context,
     for boundary in neuron_group_boundaries[:-1]:
         ax.axvline(boundary - 0.5, color='cyan', linestyle='-', linewidth=2.5)
 
-    line_colors = ['white', 'yellow', 'magenta', 'orange', 'red']
+    line_colors = ['white', 'yellow', 'magenta', 'orange', 'red', 'lime', 'blue', 'purple', 'brown', 'pink']
     x_start = -0.5 
 
     for i, (label, boundary) in enumerate(zip(group_labels, neuron_group_boundaries)):
@@ -355,15 +489,10 @@ def plot_sequentially_sorted_clusters(norm_var_activities_per_context,
         dim_to_group_by = int(label.replace("C", ""))
         
         sorted_dim_contexts = contexts_unique[ctx_order_y, dim_to_group_by]
-
         diffs = np.diff(sorted_dim_contexts)
-        
         all_boundaries = np.where(diffs != 0)[0] + 0.5
-
         cycle_starts = np.where(diffs < 0)[0] + 0.5
-
         normal_boundaries = np.setdiff1d(all_boundaries, cycle_starts)
-
         ax.hlines(normal_boundaries, xmin=x_start, xmax=x_end,
                 color=color, linestyle='--' , linewidth=1.5, alpha=0.9)
 
@@ -489,48 +618,6 @@ def plot_lesion_effects_across_clusters(model,
     return figs, axs,[int(c) for c in sample_context[:3]]
 
 
-def plot_sorted_cluster(config,
-                        model,
-                        loader,
-                        fig=None,
-                        ax=None,
-                        selectivity_threshold=0.1,
-                        purity_threshold=0.5):
-    activations, contexts = get_rnn_activities_and_sources_for_loader_for_clustering(model, loader)
-    max_num_clusters, scores, norm_var_activities_per_context, active_units, labels = get_optimal_n_cluster(model, activations=activations, contexts=contexts, time_variance=False, device=DEVICE)
-    
-    if max_num_clusters ==1:
-        print("Only one cluster found, skipping plotting.")
-        return None,None
-    
-    unique_contexts, inv = contexts.unique(dim=0, return_inverse=True)
-
-    print(f"Optimal number of clusters: {max_num_clusters}, Silhouette scores: {scores}")
-
-    (sorted_order, group_labels, group_boundaries,
-    peak_map, informative_indices, cluster_profiles) = analyze_and_sort_clusters(
-        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
-        contexts_unique=unique_contexts.cpu(),
-        labels=labels,
-        selectivity_threshold= selectivity_threshold,
-        purity_threshold= purity_threshold
-    )
-    if fig is None or ax is None:
-        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
-        
-    plot_sequentially_sorted_clusters(
-        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
-        contexts_unique=unique_contexts.cpu(),
-        labels=labels,
-        final_cluster_order=sorted_order,
-        group_labels=group_labels,
-        group_boundaries_by_cluster_count=group_boundaries,
-        put_y_label= "auto" in config.model.type,
-        fig=fig,
-        ax=ax
-    )
-
-    return fig,ax 
 
 def plot_cluster_and_lesions(config,model,loader,fig=None, ax=None):
     
@@ -553,6 +640,13 @@ def plot_cluster_and_lesions(config,model,loader,fig=None, ax=None):
     )
     fig_cluster,ax_cluster = plt.subplots(1, 1, figsize=(10, 8))
     
+    if "sketch" in config.dataset.name:
+        group_name_map = {"C0":"shape","C1":"color","C2":"position"}
+        
+    elif "ddd" in config.dataset.name:
+        # next_shape_offset,next_floor_offset,next_wall_offset,next_object_offset,next_scale_offset,next_orientation_offset
+        group_name_map = {"C0":"shape","C1":"floor hue","C2":"wall hue","C3":"scale"}
+    
     plot_sequentially_sorted_clusters(
         norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
         contexts_unique=unique_contexts.cpu(),
@@ -560,7 +654,7 @@ def plot_cluster_and_lesions(config,model,loader,fig=None, ax=None):
         final_cluster_order=sorted_order,
         group_labels=group_labels,
         group_boundaries_by_cluster_count=group_boundaries,
-        group_name_map={"C0":"shape","C1":"color","C2":"position"},
+        group_name_map=group_name_map,
         put_y_label= not "auto" in config.model.type,
         fig=fig_cluster,
         ax=ax_cluster
@@ -647,3 +741,47 @@ def plot_cluster_lesion_delta(original_network_losses,
     return fig, ax
     
     
+    
+
+def plot_sorted_cluster(config,
+                        model,
+                        loader,
+                        fig=None,
+                        ax=None,
+                        selectivity_threshold=0.1,
+                        purity_threshold=0.5):
+    activations, contexts = get_rnn_activities_and_sources_for_loader_for_clustering(model, loader)
+    max_num_clusters, scores, norm_var_activities_per_context, active_units, labels = get_optimal_n_cluster(model, activations=activations, contexts=contexts, time_variance=False, device=DEVICE)
+    
+    if max_num_clusters ==1:
+        print("Only one cluster found, skipping plotting.")
+        return None,None
+    
+    unique_contexts, inv = contexts.unique(dim=0, return_inverse=True)
+
+    print(f"Optimal number of clusters: {max_num_clusters}, Silhouette scores: {scores}")
+
+    (sorted_order, group_labels, group_boundaries,
+    peak_map, informative_indices, cluster_profiles) = analyze_and_sort_clusters(
+        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
+        contexts_unique=unique_contexts.cpu(),
+        labels=labels,
+        selectivity_threshold= selectivity_threshold,
+        purity_threshold= purity_threshold
+    )
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        
+    plot_sequentially_sorted_clusters(
+        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
+        contexts_unique=unique_contexts.cpu(),
+        labels=labels,
+        final_cluster_order=sorted_order,
+        group_labels=group_labels,
+        group_boundaries_by_cluster_count=group_boundaries,
+        put_y_label= "auto" in config.model.type,
+        fig=fig,
+        ax=ax
+    )
+
+    return fig,ax 

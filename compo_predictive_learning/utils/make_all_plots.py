@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import traceback
 
 from datetime import datetime
-from compo_predictive_learning.metrics.clustering import plot_cluster_and_lesions,plot_sorted_cluster
+from compo_predictive_learning.metrics.clustering import plot_cluster_and_lesions
 from compo_predictive_learning.metrics.network_weights_plots import network_weights_plots
 from compo_predictive_learning.metrics.network_activity_plots import network_activity_plots
 

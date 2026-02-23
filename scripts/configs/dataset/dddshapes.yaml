@@ -1,0 +1,45 @@
+# -------------------------
+# DD3Shapes dataset config
+# -------------------------
+
+num_train_sequences_per_context: 256
+num_val_sequences_per_context: 128
+
+# Context dimensions (offsets) you will enumerate to build contexts
+contexts: [next_shape_offset,next_floor_offset,next_wall_offset,next_object_offset,next_scale_offset,next_orientation_offset]
+
+# Offsets (how much factor changes from t to t+1)
+next_shape_offset: [0,1,2]
+next_scale_offset: [0,1,2]
+next_orientation_offset: [0]
+next_floor_offset: [0]
+next_wall_offset: [0,1,2]
+next_object_offset: [0,1,2]
+
+# Fix some factors to a single value if desired
+one_floor: True
+one_wall: False
+one_object: False
+one_scale: False
+one_shape: False
+one_orientation: True
+
+subsample_task_abstract: 1.0
+# Subsampling fractions (1 = keep all values, 0.5 = take every other value, etc.)
+subsample_shape: 1
+subsample_scale: 0.5
+subsample_orientation: 1
+subsample_floor: 1
+subsample_wall: 0.5
+subsample_object: 0.5
+
+seq_len: 6
+
+# 3DShapes H5 file (update if your path differs)
+path: /home/ghb24/paper_git/comp_predictive_learning/data/3dshapes.h5
+
+# Optional but common in your codebase: RGB vs HSV preprocessing
+color_mode: rgb
+
+# Name string in the same spirit as your dsprites naming convention
+name: dddshapes_${.seq_len}/${.num_train_sequences_per_context}_${.num_val_sequences_per_context}/${.next_floor_offset}/${.next_wall_offset}/${.next_object_offset}/${.next_scale_offset}/${.next_shape_offset}/${.next_orientation_offset}/${.one_floor}_${.one_wall}_${.one_object}_${.one_scale}_${.one_shape}_${.one_orientation}_${.subsample_shape}_${.subsample_scale}_${.subsample_orientation}_${.subsample_floor}_${.subsample_wall}_${.subsample_object}
