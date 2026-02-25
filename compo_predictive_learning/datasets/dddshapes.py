@@ -10,12 +10,9 @@ from skimage.color import rgb2hsv
 from torch.utils.data import Dataset
 import random
 
-
 class TransitionShapes3D(Dataset):
-    # 1) Fix factor_sizes (must match `factors` order!)
     """
     Disentangled dataset used in Kim and Mnih, (2019)
-
     #==========================================================================
     # factor Dimension,    factor values                                 N vals
     #==========================================================================
@@ -28,8 +25,8 @@ class TransitionShapes3D(Dataset):
     """
     files = {"train": "../data/raw/shapes3d/3dshapes.h5"}
     n_factors = 6
-    factors = ('shape','floor_hue', 'wall_hue', 'object_hue',
-               'scale', 'orientation')
+    factor_sizes = np.array([10, 10, 10, 8, 4, 15])
+    factors = ('floor_hue', 'wall_hue', 'object_hue', 'scale', 'shape', 'orientation')
     categorical = np.array([0, 0, 0, 0, 1, 0])
     img_size = (3, 64, 64)
 
@@ -47,8 +44,6 @@ class TransitionShapes3D(Dataset):
                                      -4.28571429, 0., 4.28571429, 8.57142857,
                                      12.85714286, 17.14285714, 21.42857143,
                                      25.71428571,  30.])}
-    factor_sizes = np.array([4, 10, 10, 10, 8, 15])
-    
     
     def __init__(self,
                 imgs,
@@ -82,6 +77,16 @@ class TransitionShapes3D(Dataset):
                 subsample_scale=1.0,
                 subsample_shape=1.0,
                 subsample_orientation=1.0):
+
+        self.factors = ('floor_hue', 'wall_hue', 'object_hue', 'scale', 'shape', 'orientation')
+        self.factor_sizes = {
+            'floor_hue': 10,
+            'wall_hue': 10,
+            'object_hue': 10,
+            'scale': 8,
+            'shape': 4,
+            'orientation': 15
+        }
 
         self.imgs = imgs
         self.num_seq = num_seq
@@ -141,6 +146,13 @@ class TransitionShapes3D(Dataset):
             assert self.offsets[f] == 0 or not self.ones[f], \
                 f"Offset for {f} must be zero if only one value is allowed."
 
+
+        # BUT flat image index strides must use the ORIGINAL global layout of the h5 file
+        _global_factor_sizes = np.array([10, 10, 10, 8, 4, 15])  # class-level, never changes
+        factor_bases = np.array(
+            [np.prod(_global_factor_sizes[i + 1:]) for i in range(len(_global_factor_sizes))],
+            dtype=np.int64
+        )
         # 3) Episodes (same logic as yours; keep abstract option)
         if random_data:
             self.episodes_indices = [self.create_episode() for _ in range(num_seq)]
@@ -154,40 +166,34 @@ class TransitionShapes3D(Dataset):
         # 4) Local -> Global mapping (like dsprites)
         local_to_global = {}
         for f in self.factors:
-            local_vals = self.possible_values[f]
-            global_vals = self.unique_values[f]
-            mapping = []
-            for val in local_vals:
-                g_idx = np.where(np.isclose(global_vals, val))[0][0]
-                mapping.append(g_idx)
-            local_to_global[f] = np.array(mapping)
+            local_vals  = self.possible_values[f]
+            global_vals = TransitionShapes3D.unique_values[f]   # always the full set
+            local_to_global[f] = np.array([
+                np.where(np.isclose(global_vals, v))[0][0] for v in local_vals
+            ])
 
-        # 5) Strides using *corrected* factor_sizes
-        strides = np.cumprod([1] + list(self.factor_sizes[::-1]))[::-1][1:]
+        factor_bases = np.array(
+            [np.prod(_global_factor_sizes[i + 1:]) for i in range(len(_global_factor_sizes))],
+            dtype=np.int64
+        )
 
-        # 6) Precompute z_indices and flat_img_indices
         self.z_indices = []
         self.flat_img_indices = []
-
         for ep in self.episodes_indices:
-            seq_z = []
-            seq_img = []
+            seq_z, seq_img = [], []
             for step in ep:
-                z = []
-                flat = 0
-                for k, f in enumerate(self.factors):
-                    local_idx = step[f]
-                    global_idx = int(local_to_global[f][local_idx])
-                    z.append(global_idx)
-                    flat += global_idx * strides[k]
+                z = [int(local_to_global[f][step[f]]) for f in self.factors]
                 seq_z.append(z)
-                seq_img.append(int(flat))
+                seq_img.append(int(np.dot(np.array(z, dtype=np.int64), factor_bases)))
             self.z_indices.append(seq_z)
             self.flat_img_indices.append(seq_img)
 
-        self.z_indices = torch.tensor(self.z_indices, dtype=torch.long)
+        self.z_indices        = torch.tensor(self.z_indices,        dtype=torch.long)
         self.flat_img_indices = torch.tensor(self.flat_img_indices, dtype=torch.long)
-        self.context = torch.tensor([off for off in self.offsets.values()]).float()
+
+        self.context = torch.tensor(
+            [self.offsets[f] for f in self.factors], dtype=torch.float32
+        )
 
     def create_all_abstract_episodes(self, is_train=True,test_latent="shape",sampling_factor=0.1):
         # Split each factor's index range
@@ -227,16 +233,6 @@ class TransitionShapes3D(Dataset):
             episode.append(step)
         return episode
 
-    def latent_indices_to_img_idx(self, latent_vals):
-        # Compute strides and index
-        strides = np.cumprod([1] + list(self.factor_sizes[::-1]))[::-1][1:]
-        idx = 0
-        for i, f in enumerate(self.factors):
-            val = latent_vals[f]
-            pos = self.unique_values[f].tolist().index(val)
-            idx += pos * strides[i]
-        return int(idx)
-
     def __getitem__(self, i):
         img_idxs = self.flat_img_indices[i]      # [seq_len]
         latents  = self.z_indices[i]             # [seq_len, n_factors] (global indices)
@@ -246,8 +242,6 @@ class TransitionShapes3D(Dataset):
     
     def __len__(self):
         return self.num_seq
-
-
 
 def load_raw(path, factor_filter=None):
     data_zip = h5py.File(path, 'r')
@@ -288,7 +282,6 @@ def load(data_filters=(None, None), train=True, color_mode='rgb', path=None):
     else:
         data = TransitionShapes3D(*load_raw(path, test_filter), color_mode=color_mode)
     return data
-
 
 def make_dataset(num_samples,
                  config,
@@ -364,12 +357,12 @@ def make_dddshapes_loader(config,
                                         factor_values=factor_values,
                                         factor_classes=factor_classes,
                                         color_mode=config.dataset.color_mode,
-                                        subsample_floor=config.dataset.get("subsample_floor", 1.0),
-                                        subsample_wall=config.dataset.get("subsample_wall", 1.0),
-                                        subsample_object=config.dataset.get("subsample_object", 1.0),
-                                        subsample_scale=config.dataset.get("subsample_scale", 1.0),
-                                        subsample_shape=config.dataset.get("subsample_shape", 1.0),
-                                        subsample_orientation=config.dataset.get("subsample_orientation", 1.0),
+                                        subsample_floor=config.dataset.subsample_floor,
+                                        subsample_wall=config.dataset.subsample_wall,
+                                        subsample_object=config.dataset.subsample_object,
+                                        subsample_scale=config.dataset.subsample_scale,
+                                        subsample_shape=config.dataset.subsample_shape,
+                                        subsample_orientation=config.dataset.subsample_orientation,
                                         random_data=True,
                                         task_abstract=False,
                                         **ctxt)
