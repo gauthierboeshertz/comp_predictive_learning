@@ -27,6 +27,7 @@ class TransitionShapes3D(Dataset):
     n_factors = 6
     factor_sizes = np.array([10, 10, 10, 8, 4, 15])
     factors = ('floor_hue', 'wall_hue', 'object_hue', 'scale', 'shape', 'orientation')
+    dynamics = ('next_floor_offset', 'next_wall_offset', 'next_object_offset', 'next_scale_offset', 'next_shape_offset', 'next_orientation_offset')
     categorical = np.array([0, 0, 0, 0, 1, 0])
     img_size = (3, 64, 64)
 
@@ -370,7 +371,7 @@ def make_dddshapes_loader(config,
             context_vector = torch.zeros((context_vector_size))
             context_vector[ctxt_val_idx+context_start_idx] = 1
         else:
-            context_vector = torch.tensor(ctxt_val, dtype=torch.float32)
+            context_vector = torch.tensor([ctxt[f] for f in TransitionShapes3D.dynamics], dtype=torch.float32)
         if put_in_dict:
             context_name = "".join([f"{config.dataset.contexts[i]}_{ctxt_val[i]}" for i in range(len(ctxt_val))])
             concat_ds = (context_ds,context_vector.unsqueeze(0))

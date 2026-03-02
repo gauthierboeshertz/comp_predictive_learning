@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from compo_predictive_learning.metrics.clustering import get_optimal_n_cluster, get_rnn_activities_and_sources_for_loader_for_clustering, analyze_and_sort_clusters
+from compo_predictive_learning.metrics.clustering import get_optimal_n_clusters, get_rnn_activities_and_sources_for_loader_for_clustering, analyze_and_sort_clusters
 import copy 
 import torch
 import numpy as np
@@ -203,7 +203,7 @@ def network_activity_plots(model,loader=None,activations=None,contexts=None,nois
         assert loader is not None, "Either provide a loader or precomputed activations and contexts"
         activations, contexts = get_rnn_activities_and_sources_for_loader_for_clustering(model, loader)
 
-    max_num_clusters, scores, norm_var_activities_per_context, active_units, labels = get_optimal_n_cluster(model,
+    max_num_clusters, scores, norm_var_activities_per_context, active_units, labels = get_optimal_n_clusters(model,
                                                                                                         activations=activations,
                                                                                                         contexts=contexts,
                                                                                                         time_variance=False)
@@ -214,7 +214,7 @@ def network_activity_plots(model,loader=None,activations=None,contexts=None,nois
 
     (sorted_order, group_labels, group_boundaries,
     peak_map, informative_indices, cluster_profiles) = analyze_and_sort_clusters(
-        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
+        norm_var=norm_var_activities_per_context.cpu().numpy(),
         contexts_unique=unique_contexts.cpu(),
         labels=labels,
         selectivity_threshold= 0.2,

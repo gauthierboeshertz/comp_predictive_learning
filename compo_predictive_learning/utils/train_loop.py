@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from collections import defaultdict
 from compo_predictive_learning.metrics.disentanglement import disentanglement_metric
-from compo_predictive_learning.metrics.clustering import get_optimal_n_cluster,get_rnn_activities_and_sources_for_loader_for_clustering
+from compo_predictive_learning.metrics.clustering import get_optimal_n_clusters,get_rnn_activities_and_sources_for_loader_for_clustering
 from compo_predictive_learning.utils.make_all_plots import make_all_plots
 import traceback
 
@@ -113,7 +113,7 @@ def train_loop(config,
                 if config.compute_clustering:
                     activity, sources = get_rnn_activities_and_sources_for_loader_for_clustering(model, analysis_loader)
                     try:
-                        optimal_n_clusters = get_optimal_n_cluster(model, activations=activity, contexts=sources, time_variance=False, device=DEVICE)[0]
+                        optimal_n_clusters = get_optimal_n_clusters(model, activations=activity, contexts=sources, time_variance=False, device=DEVICE)[0]
                         metrics["optimal_n_clusters"].append(optimal_n_clusters)
 
                     except Exception as e:

@@ -22,7 +22,7 @@ class JitLeakyRNNLayer(jit.ScriptModule):
     def __init__(self, 
                  input_dim, 
                  hidden_dim,
-                 activation=nn.Sigmoid,
+                 activation="relu",
                  leak_alpha=1,
                  noise=0,
                  rnn_init='orthogonal',
@@ -49,7 +49,7 @@ class JitLeakyRNNLayer(jit.ScriptModule):
                 torch.nn.init.eye_(layer2.weight)/2
             else:
                 raise ValueError('Invalid rnn_init')
-            self.weight_hh = nn.Sequential(layer1,activation(),layer2)
+            self.weight_hh = nn.Sequential(layer1,activation_dict[activation](),layer2)
         else:
             self.weight_hh = torch.nn.Linear(hidden_dim, hidden_dim, bias=False)
             if rnn_init == 'orthogonal':

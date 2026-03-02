@@ -6,7 +6,7 @@ import math
 from matplotlib.lines import Line2D
 from itertools import combinations
 import torch
-from compo_predictive_learning.metrics.clustering import get_optimal_n_cluster, get_rnn_activities_and_sources_for_loader_for_clustering, analyze_and_sort_clusters
+from compo_predictive_learning.metrics.clustering import get_optimal_n_clusters, get_rnn_activities_and_sources_for_loader_for_clustering, analyze_and_sort_clusters
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -87,11 +87,10 @@ def network_weights_plots(model,loader=None,activations=None,contexts=None,class
         assert loader is not None, "Either provide a loader or precomputed activations and contexts"
         activations, contexts = get_rnn_activities_and_sources_for_loader_for_clustering(model, loader)
 
-    max_num_clusters, scores, norm_var_activities_per_context, active_units, labels = get_optimal_n_cluster(model,
+    max_num_clusters, scores, norm_var_activities_per_context, active_units, labels = get_optimal_n_clusters(model,
                                                                                                         activations=activations,
                                                                                                         contexts=contexts,
-                                                                                                        time_variance=False,
-                                                                                                        device=DEVICE)
+                                                                                                        time_variance=False)
     
     if max_num_clusters <=2:
         print("Not enough clusters found, skipping network weights plots.")
@@ -100,7 +99,7 @@ def network_weights_plots(model,loader=None,activations=None,contexts=None,class
 
     (sorted_order, group_labels, group_boundaries,
     peak_map, informative_indices, cluster_profiles) = analyze_and_sort_clusters(
-        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
+        norm_var=norm_var_activities_per_context.cpu().numpy(),
         contexts_unique=unique_contexts.cpu(),
         labels=labels,
         selectivity_threshold= 0.2,

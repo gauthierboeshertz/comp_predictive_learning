@@ -1,15 +1,13 @@
-import torch 
-from sklearn import metrics
-# Clustering
-from sklearn.cluster import KMeans
+import copy
 import numpy as np
-from collections import defaultdict
-import numpy as np
-import matplotlib.pyplot as plt
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-import copy 
 import torch
 import matplotlib.pyplot as plt
+from collections import defaultdict
+from sklearn.cluster import KMeans
+from sklearn import metrics
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 
 @torch.no_grad()
@@ -29,759 +27,369 @@ def get_rnn_activities_and_sources_for_loader_for_clustering(model,loader,device
     contexts = torch.cat(contexts,dim=0).contiguous()
     return activities, contexts
 
+# ── Data collection ────────────────────────────────────────────────────────────
+
+
+# ── Clustering ─────────────────────────────────────────────────────────────────
+
 @torch.no_grad()
-def get_optimal_n_cluster(model,
-                          activations=None,
-                          contexts=None,
-                          loader=None,
-                          time_variance=True,
-                          device='cuda',
-                          max_num_clusters=25):
-
-    assert (activations is not None) or (loader is not None), "Either activations or loader must be provided"
+def get_optimal_n_clusters(model, loader=None, activations=None, contexts=None,
+                           time_variance=True, max_clusters=25,device=None):
+    """
+    Find the best KMeans cluster count via silhouette score.
+    Returns (best_k, scores, norm_variance, active_units, labels).
+    """
     if activations is None:
-        activations, _,contexts = get_rnn_activities_and_sources_for_loader_for_clustering(model,loader,device=device)
-    
-    _,inv = contexts.unique(dim=0,return_inverse=True)
-    rnn_activities_per_context = []
-    for i in range(inv.max().item()+1):
-        rnn_activities_per_context.append(activations[inv==i])
-    
-    rnn_activities_per_context = torch.stack(rnn_activities_per_context)
-    rnn_activities_per_context = rnn_activities_per_context.permute(3,0,1,2)
+        activations, contexts = get_rnn_activities_and_sources_for_loader_for_clustering(model, loader)
 
-    if time_variance:
-        var_activities_per_context = rnn_activities_per_context.var(dim=3).mean(dim=2)
-    else:
-        var_activities_per_context = rnn_activities_per_context.var(dim=2).mean(dim=2)
-        
-    active_units = var_activities_per_context.sum(1) > 0.001
-    var_activities_per_context = var_activities_per_context[active_units]
-    norm_var_activities_per_context = (var_activities_per_context.T/(var_activities_per_context.max(1)[0]+1e-6)).T
+    # Per-context mean variance profile for each neuron
+    _, inv = contexts.unique(dim=0, return_inverse=True)
+    per_ctx = torch.stack([activations[inv == i] for i in range(inv.max() + 1)])
+    per_ctx = per_ctx.permute(3, 0, 1, 2)  # (neurons, contexts, trials, time)
 
-    X = norm_var_activities_per_context.numpy()
-    
-    n_samples, n_features = X.shape
-    if n_samples < 2 or n_features < 2:
-        print("Not enough samples or features for clustering. Ensure that the input data has at least two samples and two features.")
-        return 1, None, None, None,None
+    dim = 3 if time_variance else 2
+    var_profile = per_ctx.var(dim=dim).mean(dim=2)  # (neurons, contexts)
 
-    max_num_clusters = min(max_num_clusters, n_samples)
-    n_clusters = list(range(2, max_num_clusters))
-    scores = list()
+    active = var_profile.sum(1) > 0.001
+    var_profile = var_profile[active]
+    norm_var = (var_profile.T / (var_profile.max(1)[0] + 1e-6)).T
 
-    max_num_clusters = min(max_num_clusters, n_samples)
-    n_clusters = list(range(2, max_num_clusters))
-    scores = list()
-    for n_cluster in n_clusters:
-        clustering = KMeans(n_cluster, algorithm='lloyd',random_state=0)
-        clustering.fit(X) 
-        labels = clustering.labels_ 
-        score = metrics.silhouette_score(X, labels)
-        scores.append(score)
+    X = norm_var.numpy()
+    n_samples = X.shape[0]
+    if n_samples < 2:
+        print("Not enough samples for clustering.")
+        return 1, None, None, None, None
 
-    scores = np.array(scores)
-    labels = KMeans(n_clusters[np.argmax(scores)], random_state=0).fit_predict(X)
-    return n_clusters[np.argmax(scores)], scores, norm_var_activities_per_context, active_units,labels
+    ks = list(range(2, min(max_clusters, n_samples)))
+    scores = [
+        metrics.silhouette_score(X, KMeans(k, algorithm="lloyd", random_state=0).fit_predict(X))
+        for k in ks
+    ]
 
+    best_k = ks[np.argmax(scores)]
+    labels = KMeans(best_k, random_state=0).fit_predict(X)
+    return best_k, np.array(scores), norm_var, active, labels
+
+
+# ── Loss utilities ─────────────────────────────────────────────────────────────
 
 def get_loss_per_context(model, loader):
+    """Return {context_tuple: mean_loss} for each context in the loader."""
     model.eval()
+    model.loss_fn = model.new_loss_fn(reduction="none")
     loss_per_context = defaultdict(list)
 
-    model.loss_fn = model.new_loss_fn(reduction="none")
-        
     with torch.no_grad():
-        for batch in loader:
-            prim_in, latents, contexts = batch
-            inputs, labels = prim_in, prim_in
-            T,B, = prim_in.shape[:2]
-            losses = model.loss(inputs)[0]
-            losses = torch.mean(losses,dim=(0,2,3,4))
-            for sample_idx, ctxt in enumerate(contexts):
-                ctx_vec = tuple(ctxt.cpu().tolist())
-                loss_per_context[ctx_vec].append(losses[sample_idx].item())
+        for prim_in, _, contexts in loader:
+            losses = model.loss(prim_in)[0].mean(dim=(0, 2, 3, 4))
+            for idx, ctx in enumerate(contexts):
+                loss_per_context[tuple(ctx.cpu().tolist())].append(losses[idx].item())
 
-    mean_loss_per_context = {
-        ctx: sum(vals)/len(vals)
-        for ctx, vals in loss_per_context.items()
-    }
+    return {ctx: np.mean(vals) for ctx, vals in loss_per_context.items()}
 
-    return mean_loss_per_context
 
-def computer_lesioned_cluster_losses(model,
-                                 dataloader,
-                                 active_units,
-                                 labels,
-                                 number_of_clusters):
-    mask = active_units.cpu().numpy()
-    total_neurons = mask.shape[0]
+def compute_lesioned_cluster_losses(model, loader, active_units, labels, n_clusters):
+    """Lesion each cluster in turn; return (cluster_losses, original_losses, cluster_to_neurons)."""
+    active_idx = np.where(active_units.cpu().numpy())[0]
+    cluster_to_neurons = {c: active_idx[labels == c] for c in range(n_clusters)}
 
-    full_labels = np.full(total_neurons, -1, dtype=int)
+    original_losses = get_loss_per_context(model.create_new_instance().to(DEVICE), loader)
 
-    active_idx = np.where(mask)[0]
-
-    full_labels[active_idx] = labels
-
-    clusters_to_neurons = {
-        c: active_idx[labels == c]
-        for c in range(number_of_clusters)
-    }
-
-    original_network_losses = get_loss_per_context(model.create_new_instance().to(DEVICE), dataloader)
     cluster_losses = {}
-    for clus in clusters_to_neurons:
-        neurons_to_inhib = clusters_to_neurons[clus]
-        lesioned_network = model.create_lesioned_instance(neurons_to_inhib).to(DEVICE)
-        lesioned_network_losses = get_loss_per_context(lesioned_network, dataloader)
-        cluster_losses[clus] = lesioned_network_losses
-        print(f"Cluster {clus}, original loss: {np.mean(list(original_network_losses.values())):.4f}, new loss: {np.mean(list(lesioned_network_losses.values())):.4f}")
-    return cluster_losses, original_network_losses,clusters_to_neurons
+    for cid, neurons in cluster_to_neurons.items():
+        lesioned = model.create_lesioned_instance(neurons).to(DEVICE)
+        cluster_losses[cid] = get_loss_per_context(lesioned, loader)
+        orig = np.mean(list(original_losses.values()))
+        new  = np.mean(list(cluster_losses[cid].values()))
+        print(f"Cluster {cid}: orig={orig:.4f}  lesioned={new:.4f}")
+
+    return cluster_losses, original_losses, cluster_to_neurons
 
 
-def plot_clusters(norm_var_activities_per_context,
-                contexts_unique,
-                labels,
-                fig,
-                ax):
+# ── Cluster analysis ───────────────────────────────────────────────────────────
 
-    neuron_order  = np.argsort(labels)
-    ctx           = contexts_unique.cpu().numpy()
-    
-    ctx_order     = np.lexsort((ctx[:,2], ctx[:,0]))            
-
-    heat          = norm_var_activities_per_context[neuron_order, :].T                        # (n_ctx, n_neurons)
-    heat_sorted   = heat[ctx_order, :]
-    cluster_vals  = labels[neuron_order]
-
-    boundaries    = np.where(np.diff(cluster_vals) != 0)[0] + 0.5
-
-    centers       = []
-    cluster_ids   = np.unique(cluster_vals)
-    for k in cluster_ids:
-        idxs = np.where(cluster_vals == k)[0]
-        centers.append(idxs.mean())
-
-    im = ax.imshow(heat_sorted, aspect='auto', origin='upper')
-
-    ax.set_xticks(boundaries, minor=True)
-    ax.tick_params(axis='x', which='minor', length=12, color='k')
-
-    ax.set_xticks(centers, minor=False)
-    ax.set_xticklabels([str(int(k)) for k in cluster_ids], fontsize=16)
-    ax.tick_params(axis='x', which='major', length=0)
-
-    n_ctx = heat_sorted.shape[0]
-    ax.set_yticks(np.arange(n_ctx))
-    
-    ctx_vals = [ctx[ctord] for ctord in ctx_order]
-
-    ax.set_yticklabels([f'{[int(c) for c in cs]}' for cs in ctx_vals],fontsize=8)
-
-    ax.set_xlabel("Neuron clusters", fontsize=12)
-    ax.set_ylabel("Contexts" +f"{[f'C{cidx}' for cidx in range(contexts_unique.shape[1])]}",fontsize=12)
-
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("Normalized variance",fontsize=28)
-
-    fig.set_tight_layout(True)
-    return fig, ax
-
-
-def create_context_activity_map(cluster_profiles,
-                                contexts_unique,
-                                informative_indices,
-                                activity_threshold=0.5):
+def analyze_and_sort_clusters(norm_var, contexts_unique, labels,
+                               selectivity_threshold=0.5, purity_threshold=0.90):
     """
-    Creates a map from every context to all informative clusters active above a threshold.
+    Classify clusters as selective to a context dimension or non-selective,
+    then return a sorted ordering for plotting.
     """
-    if isinstance(contexts_unique, torch.Tensor):
-        contexts_unique = contexts_unique.cpu().numpy()
+    def to_numpy(x):
+        return x.detach().cpu().numpy() if hasattr(x, "detach") else np.asarray(x)
 
-    context_activity_map = {tuple(ctx): [] for ctx in contexts_unique}
+    norm_var        = to_numpy(norm_var)
+    contexts_unique = to_numpy(contexts_unique)
+    labels          = to_numpy(labels).reshape(-1)
 
-    for cluster_id in informative_indices:
-        profile = cluster_profiles[cluster_id]
-        
-        active_context_indices = np.where(profile > activity_threshold)[0]
-        
-        for ctx_idx in active_context_indices:
-            context_tuple = tuple(contexts_unique[ctx_idx])
-            context_activity_map[context_tuple].append(int(cluster_id))
-            
-    return context_activity_map
+    n_clusters  = labels.max() + 1
+    n_contexts  = norm_var.shape[1]
+    eps         = 1e-9
 
+    # Mean activity profile per cluster
+    profiles = np.array([
+        norm_var[labels == c].mean(axis=0) if (labels == c).any() else np.zeros(n_contexts)
+        for c in range(n_clusters)
+    ])
 
-# def analyze_and_sort_clusters(norm_var_activities_per_context,
-#                               contexts_unique,
-#                               labels,
-#                               selectivity_threshold=0.5,
-#                               purity_threshold=0.90):
-
-#     if isinstance(norm_var_activities_per_context, torch.Tensor):
-#         norm_var_activities_per_context = norm_var_activities_per_context.cpu().numpy()
-#     if isinstance(contexts_unique, torch.Tensor):
-#         contexts_unique = contexts_unique.cpu().numpy()
-#     if isinstance(labels, torch.Tensor):
-#         labels = labels.cpu().numpy()
-
-#     flat_labels = labels.flatten()
-#     n_clusters = len(np.unique(flat_labels))
-#     n_contexts = norm_var_activities_per_context.shape[1]
-#     cluster_profiles = np.zeros((n_clusters, n_contexts))
-#     for i in range(n_clusters):
-#         neurons_in_cluster = np.where(flat_labels == i)[0]
-#         if len(neurons_in_cluster) > 0:
-#             cluster_profiles[i, :] = norm_var_activities_per_context[neurons_in_cluster, :].mean(axis=0)
-
-#     peak_activity = cluster_profiles.max(axis=1)
-#     sum_activity = cluster_profiles.sum(axis=1)
-#     mean_other_activity = (sum_activity - peak_activity) / (n_contexts - 1)
-#     epsilon = 1e-9
-#     selectivity_scores = (peak_activity - mean_other_activity) / (peak_activity + mean_other_activity + epsilon)
-
-#     informative_indices = np.where(selectivity_scores > selectivity_threshold)[0]
-#     non_selective_indices = np.where(selectivity_scores <= selectivity_threshold)[0]
-#     non_selective_indices.sort()
-
-#     context_to_peak_clusters_map = {}
-#     if len(informative_indices) > 0:
-#         informative_profiles = cluster_profiles[informative_indices]
-#         peak_context_indices = np.argmax(informative_profiles, axis=1)
-#         for i, cluster_id in enumerate(informative_indices):
-#             peak_ctx_idx = peak_context_indices[i]
-#             peak_ctx_vector = contexts_unique[peak_ctx_idx]
-#             peak_ctx_tuple = tuple(peak_ctx_vector)
-#             if peak_ctx_tuple not in context_to_peak_clusters_map:
-#                 context_to_peak_clusters_map[peak_ctx_tuple] = []
-#             context_to_peak_clusters_map[peak_ctx_tuple].append(int(cluster_id))
-
-#     sorted_informative_clusters = []
-#     group_boundaries_by_cluster_count = []
-#     group_labels = []
-#     if len(informative_indices) > 0:
-#         unassigned_mask = np.ones(len(informative_indices), dtype=bool)
-#         ctx_order_y = np.lexsort(tuple(contexts_unique[:, i] for i in range(contexts_unique.shape[1] - 1, -1, -1)))
-#         y_pos = np.empty_like(ctx_order_y); y_pos[ctx_order_y] = np.arange(len(ctx_order_y))
-#         for dim in range(contexts_unique.shape[1]):
-#             current_indices_map = np.where(unassigned_mask)[0]
-#             if len(current_indices_map) == 0: break
-#             current_profiles = cluster_profiles[informative_indices[current_indices_map]]
-#             dim_vals = contexts_unique[:, dim]
-#             unique_dim_vals = np.unique(dim_vals)
-#             is_pure_for_dim = []
-#             for profile in current_profiles:
-#                 total_variance = np.var(profile)
-#                 if total_variance < epsilon:
-#                     is_pure_for_dim.append(False); continue
-#                 residual_variance = np.mean([np.var(profile[dim_vals == v]) for v in unique_dim_vals])
-#                 variance_explained = 1 - (residual_variance / total_variance)
-#                 is_pure_for_dim.append(variance_explained > purity_threshold)
-#             pure_mask = np.array(is_pure_for_dim)
-#             if np.any(pure_mask):
-#                 pure_indices_original = informative_indices[current_indices_map[pure_mask]]
-#                 pure_profiles = cluster_profiles[pure_indices_original]
-#                 sort_key1 = [unique_dim_vals[np.argmax([p[dim_vals == v].sum() for v in unique_dim_vals])] for p in pure_profiles]
-#                 sort_key2 = y_pos[np.argmax(pure_profiles, axis=1)]
-#                 sorted_indices = np.lexsort((sort_key2, sort_key1))
-#                 sorted_informative_clusters.extend(pure_indices_original[sorted_indices])
-#                 group_boundaries_by_cluster_count.append(len(sorted_informative_clusters))
-#                 group_labels.append(f"C{dim}")
-#                 unassigned_mask[current_indices_map[pure_mask]] = False
-#         mixed_indices_map = np.where(unassigned_mask)[0]
-        
-#         if len(mixed_indices_map) > 0:
-#             mixed_indices_original = informative_indices[mixed_indices_map]
-#             non_selective_indices = list(non_selective_indices) + list(mixed_indices_original)
-
-
-#     final_cluster_order = sorted_informative_clusters + list(non_selective_indices)
-#     if len(non_selective_indices) > 0:
-#         group_boundaries_by_cluster_count.append(len(final_cluster_order))
-#         group_labels.append("Non-Selective")
-
-#     return (final_cluster_order, group_labels, group_boundaries_by_cluster_count,
-#             context_to_peak_clusters_map, informative_indices, cluster_profiles)
-    
-import numpy as np
-
-def analyze_and_sort_clusters(
-    norm_var_activities_per_context,
-    contexts_unique,
-    labels,
-    selectivity_threshold=0.5,
-    purity_threshold=0.90,
-    eps=1e-9,
-):
-    """
-    Simplified version of analyze_and_sort_clusters.
-
-    Returns:
-      final_cluster_order
-      group_labels
-      group_boundaries_by_cluster_count
-      context_to_peak_clusters_map
-      informative_indices
-      cluster_profiles
-    """
-
-    # --- to numpy ---
-    if hasattr(norm_var_activities_per_context, "detach"):
-        norm_var_activities_per_context = norm_var_activities_per_context.detach().cpu().numpy()
-    if hasattr(contexts_unique, "detach"):
-        contexts_unique = contexts_unique.detach().cpu().numpy()
-    if hasattr(labels, "detach"):
-        labels = labels.detach().cpu().numpy()
-
-    flat_labels = labels.reshape(-1)
-    n_contexts = norm_var_activities_per_context.shape[1]
-
-    # --- cluster profiles: mean over neurons in each cluster ---
-    n_clusters = int(np.max(flat_labels)) + 1
-    cluster_profiles = np.zeros((n_clusters, n_contexts), dtype=float)
-    for c in range(n_clusters):
-        idx = np.where(flat_labels == c)[0]
-        if idx.size:
-            cluster_profiles[c] = norm_var_activities_per_context[idx].mean(axis=0)
-
-    # --- selectivity scores (same idea as your original) ---
-    peak = cluster_profiles.max(axis=1)
-    s = cluster_profiles.sum(axis=1)
-    mean_other = (s - peak) / max(n_contexts - 1, 1)
+    # Selectivity score
+    peak       = profiles.max(axis=1)
+    mean_other = (profiles.sum(axis=1) - peak) / max(n_contexts - 1, 1)
     selectivity = (peak - mean_other) / (peak + mean_other + eps)
 
-    informative_indices = np.where(selectivity > selectivity_threshold)[0]
-    non_selective_indices = np.where(selectivity <= selectivity_threshold)[0]
+    informative = np.where(selectivity > selectivity_threshold)[0]
+    non_selective = np.where(selectivity <= selectivity_threshold)[0]
 
-    # --- map: peak context -> clusters (informative only) ---
-    context_to_peak_clusters_map = {}
-    if informative_indices.size:
-        peak_ctx_idx = np.argmax(cluster_profiles[informative_indices], axis=1)
-        for cid, ctx_i in zip(informative_indices, peak_ctx_idx):
-            key = tuple(contexts_unique[ctx_i])
-            context_to_peak_clusters_map.setdefault(key, []).append(int(cid))
+    # Peak-context map
+    peak_map = {}
+    if informative.size:
+        for cid, ctx_i in zip(informative, np.argmax(profiles[informative], axis=1)):
+            peak_map.setdefault(tuple(contexts_unique[ctx_i]), []).append(int(cid))
 
-    # --- helper: "purity" for a cluster w.r.t. a context dimension ---
-    def variance_explained_by_dim(profile, dim_vals):
+    # Variance explained by a single context dimension
+    def var_explained(profile, dim_vals):
         total = np.var(profile)
         if total < eps:
             return 0.0
-        uniq = np.unique(dim_vals)
-        resid = np.mean([np.var(profile[dim_vals == v]) for v in uniq])
-        return 1.0 - (resid / (total + eps))
+        resid = np.mean([np.var(profile[dim_vals == v]) for v in np.unique(dim_vals)])
+        return 1.0 - resid / (total + eps)
 
-    # Context y-order (same ordering trick you use later in plotting)
-    ctx_order_y = np.lexsort(
-        tuple(contexts_unique[:, i] for i in range(contexts_unique.shape[1] - 1, -1, -1))
-    )
-    y_pos = np.empty_like(ctx_order_y)
-    y_pos[ctx_order_y] = np.arange(len(ctx_order_y))
+    ctx_order = np.lexsort(tuple(contexts_unique[:, i] for i in range(contexts_unique.shape[1] - 1, -1, -1)))
+    y_pos = np.empty_like(ctx_order); y_pos[ctx_order] = np.arange(len(ctx_order))
 
-    # --- assign each informative cluster to the FIRST dimension that is "pure" ---
     n_dims = contexts_unique.shape[1]
     groups = {d: [] for d in range(n_dims)}
-    mixed = []
+    mixed  = []
 
-    for cid in informative_indices:
-        p = cluster_profiles[cid]
-        assigned = False
+    for cid in informative:
         for d in range(n_dims):
-            dim_vals = contexts_unique[:, d]
-            if variance_explained_by_dim(p, dim_vals) > purity_threshold:
-                groups[d].append(int(cid))
-                assigned = True
-                break
-        if not assigned:
+            if var_explained(profiles[cid], contexts_unique[:, d]) > purity_threshold:
+                groups[d].append(int(cid)); break
+        else:
             mixed.append(int(cid))
 
-    # --- sort clusters within each pure group (keeps your spirit, but simpler) ---
-    sorted_informative = []
-    group_boundaries = []
-    group_labels = []
-
+    sorted_informative, group_boundaries, group_labels = [], [], []
     for d in range(n_dims):
         cids = groups[d]
         if not cids:
             continue
-
-        dim_vals = contexts_unique[:, d]
+        dim_vals  = contexts_unique[:, d]
         uniq_vals = np.unique(dim_vals)
-
-        key1 = []
-        key2 = []
-
-        for cid in cids:
-            p = cluster_profiles[cid]
-            best_val = uniq_vals[np.argmax([p[dim_vals == v].sum() for v in uniq_vals])]
-            key1.append(best_val)
-            key2.append(y_pos[int(np.argmax(p))])
-
+        key1 = [uniq_vals[np.argmax([profiles[c][dim_vals == v].sum() for v in uniq_vals])] for c in cids]
+        key2 = [y_pos[int(np.argmax(profiles[c]))] for c in cids]
         order = np.lexsort((np.array(key2), np.array(key1)))
         sorted_informative.extend([cids[i] for i in order])
         group_boundaries.append(len(sorted_informative))
         group_labels.append(f"C{d}")
 
-    non_selective = np.array(sorted(list(non_selective_indices) + mixed), dtype=int)
-
-    final_cluster_order = list(sorted_informative) + list(non_selective)
-    if non_selective.size:
-        group_boundaries.append(len(final_cluster_order))
+    non_sel = np.array(sorted(list(non_selective) + mixed), dtype=int)
+    final_order = list(sorted_informative) + list(non_sel)
+    if non_sel.size:
+        group_boundaries.append(len(final_order))
         group_labels.append("Non-Selective")
 
-    return (
-        final_cluster_order,
-        group_labels,
-        group_boundaries,
-        context_to_peak_clusters_map,
-        informative_indices,
-        cluster_profiles,
-    )
+    return final_order, group_labels, group_boundaries, peak_map, informative, profiles
 
-def plot_sequentially_sorted_clusters(norm_var_activities_per_context,
-                                      contexts_unique,
-                                      labels,
-                                      final_cluster_order,
-                                      group_labels,
-                                      group_boundaries_by_cluster_count,
-                                      fig,
-                                      ax,
-                                      put_y_label=True,
-                                      group_name_map=None):
 
-    if isinstance(norm_var_activities_per_context, torch.Tensor):
-        norm_var_activities_per_context = norm_var_activities_per_context.cpu().numpy()
-    if isinstance(contexts_unique, torch.Tensor):
-        contexts_unique = contexts_unique.cpu().numpy()
-    if isinstance(labels, torch.Tensor):
-        labels = labels.cpu().numpy()
-    
-    flat_labels = labels.flatten()
+# ── Plotting ───────────────────────────────────────────────────────────────────
 
-    neurons_to_plot = [n for c_idx in final_cluster_order for n in np.where(flat_labels == c_idx)[0]]
-    neuron_order = np.array(neurons_to_plot)
-    ctx_order_y = np.lexsort(tuple(contexts_unique[:, i] for i in range(contexts_unique.shape[1] - 1, -1, -1)))
-    heat = norm_var_activities_per_context[neuron_order, :].T
-    heat_sorted = heat[ctx_order_y, :]
-    
-    im = ax.imshow(heat_sorted, aspect='auto', origin='upper', cmap='viridis')
+def _to_numpy(x):
+    return x.cpu().numpy() if isinstance(x, torch.Tensor) else np.asarray(x)
 
-    neurons_per_cluster = {i: np.sum(flat_labels == i) for i in np.unique(flat_labels)}
-    group_neuron_counts = []
-    start_cluster_idx = 0
-    for end_cluster_idx in group_boundaries_by_cluster_count:
-        clusters_in_group = final_cluster_order[start_cluster_idx:end_cluster_idx]
-        group_neuron_counts.append(sum(neurons_per_cluster.get(c, 0) for c in clusters_in_group))
-        start_cluster_idx = end_cluster_idx
-    neuron_group_boundaries = np.cumsum(group_neuron_counts)
 
-    for boundary in neuron_group_boundaries[:-1]:
-        ax.axvline(boundary - 0.5, color='cyan', linestyle='-', linewidth=2.5)
+def plot_sorted_clusters(norm_var, contexts_unique, labels,
+                          final_cluster_order, group_labels, group_boundaries,
+                          fig, ax, put_y_label=True, group_name_map=None):
+    norm_var        = _to_numpy(norm_var)
+    contexts_unique = _to_numpy(contexts_unique)
+    labels          = _to_numpy(labels).flatten()
 
-    line_colors = ['white', 'yellow', 'magenta', 'orange', 'red', 'lime', 'blue', 'purple', 'brown', 'pink']
-    x_start = -0.5 
+    # Build sorted neuron / context indices
+    neuron_order = np.concatenate([np.where(labels == c)[0] for c in final_cluster_order])
+    ctx_order    = np.lexsort(tuple(contexts_unique[:, i] for i in range(contexts_unique.shape[1] - 1, -1, -1)))
+    heat         = norm_var[neuron_order, :].T[ctx_order, :]
 
-    for i, (label, boundary) in enumerate(zip(group_labels, neuron_group_boundaries)):
-        x_end = boundary - 0.5
-        color = line_colors[i % len(line_colors)]
-        
+    im = ax.imshow(heat, aspect="auto", origin="upper", cmap="viridis")
+
+    neurons_per_cluster = {c: (labels == c).sum() for c in np.unique(labels)}
+
+    # Group neuron boundaries & dividing lines
+    counts = [sum(neurons_per_cluster.get(c, 0) for c in final_cluster_order[s:e])
+              for s, e in zip([0] + list(group_boundaries[:-1]), group_boundaries)]
+    neuron_bounds = np.cumsum(counts)
+
+    for b in neuron_bounds[:-1]:
+        ax.axvline(b - 0.5, color="cyan", linewidth=2.5)
+
+    line_colors = ["white", "yellow", "magenta", "orange", "red", "lime"]
+    x_start = -0.5
+    for i, (label, x_end) in enumerate(zip(group_labels, neuron_bounds - 0.5)):
         if not label.startswith("C"):
-            continue
-        dim_to_group_by = int(label.replace("C", ""))
-        
-        sorted_dim_contexts = contexts_unique[ctx_order_y, dim_to_group_by]
-        diffs = np.diff(sorted_dim_contexts)
-        all_boundaries = np.where(diffs != 0)[0] + 0.5
-        cycle_starts = np.where(diffs < 0)[0] + 0.5
-        normal_boundaries = np.setdiff1d(all_boundaries, cycle_starts)
-        ax.hlines(normal_boundaries, xmin=x_start, xmax=x_end,
-                color=color, linestyle='--' , linewidth=1.5, alpha=0.9)
-
-        ax.hlines(cycle_starts, xmin=x_start, xmax=x_end,
-                color=color, linestyle='-', linewidth=1.5, alpha=0.9)
-
+            x_start = x_end; continue
+        d       = int(label[1:])
+        dim_ctx = contexts_unique[ctx_order, d]
+        diffs   = np.diff(dim_ctx)
+        normal  = np.where(diffs != 0)[0][diffs[np.where(diffs != 0)[0]] > 0] + 0.5
+        cycles  = np.where(diffs < 0)[0] + 0.5
+        ax.hlines(np.setdiff1d(np.where(diffs != 0)[0] + 0.5, cycles),
+                  x_start, x_end, colors=line_colors[i % len(line_colors)],
+                  linestyles="--", linewidth=1.5, alpha=0.9)
+        ax.hlines(cycles, x_start, x_end, colors=line_colors[i % len(line_colors)],
+                  linestyles="-", linewidth=1.5, alpha=0.9)
         x_start = x_end
 
-    neuron_counts_sorted = [neurons_per_cluster.get(c, 0) for c in final_cluster_order]
-    cluster_boundaries_by_neuron = np.cumsum(neuron_counts_sorted)
-    centers = cluster_boundaries_by_neuron - (np.array(neuron_counts_sorted) / 2)
-    ax.set_xticks(centers)
-    ax.set_xticklabels([str(k) for k in final_cluster_order], fontsize=16)
-    ax.tick_params(axis='x', which='major', length=0)
-    minor_tick_locations = cluster_boundaries_by_neuron[:-1] - 0.5
-    ax.set_xticks(minor_tick_locations, minor=True)
-    ax.tick_params(axis='x', which='minor', length=6, color='black')
-    ax.set_yticks(np.arange(len(contexts_unique)))
-    ctx_vals_sorted = [contexts_unique[ctord] for ctord in ctx_order_y]
-    varying_dims = [i for i in range(contexts_unique.shape[1]) if len(np.unique(contexts_unique[:, i])) > 1]
-    if not varying_dims: varying_dims = list(range(contexts_unique.shape[1]))
-    
+    # X ticks: cluster labels centred on each cluster block
+    cluster_sizes  = [neurons_per_cluster.get(c, 0) for c in final_cluster_order]
+    cluster_bounds = np.cumsum(cluster_sizes)
+    centers        = cluster_bounds - np.array(cluster_sizes) / 2
+    ax.set_xticks(centers); ax.set_xticklabels([str(c) for c in final_cluster_order], fontsize=16)
+    ax.tick_params(axis="x", which="major", length=0)
+    ax.set_xticks(cluster_bounds[:-1] - 0.5, minor=True)
+    ax.tick_params(axis="x", which="minor", length=6)
+
+    # Y ticks
+    varying = [i for i in range(contexts_unique.shape[1]) if len(np.unique(contexts_unique[:, i])) > 1] \
+              or list(range(contexts_unique.shape[1]))
     if put_y_label:
-        new_yticklabels = [f'{[int(cs[i]) for i in varying_dims]}' for cs in ctx_vals_sorted]
-        ax.set_yticklabels(new_yticklabels, fontsize=8)
+        ax.set_yticks(np.arange(len(contexts_unique)))
+        ax.set_yticklabels([f"{[int(contexts_unique[ctx_order[r], i]) for i in varying]}"
+                            for r in range(len(ctx_order))], fontsize=8)
         ax.set_ylabel("Contexts", fontsize=26)
     else:
-        ax.set_yticklabels([])
-        ax.set_yticks([])
-    group_sizes = np.diff(np.concatenate(([0], neuron_group_boundaries)))
-    group_starts = np.concatenate(([0], neuron_group_boundaries[:-1]))
-    group_centers = group_starts + group_sizes / 2.0
+        ax.set_yticks([]); ax.set_yticklabels([])
 
-    group_labels_mapped = [group_name_map.get(lbl, lbl) if group_name_map else lbl
-                           for lbl in group_labels]
-
-    for xc, lbl in zip(group_centers, group_labels_mapped):
-        ax.annotate(lbl.replace("Non-Selective", "NS"),
-                    xy=(xc, -0.04), xycoords=ax.get_xaxis_transform(),
-                    ha='center', va='top', fontsize=20)
+    # Group labels below x-axis
+    group_centers = np.array([0] + list(neuron_bounds[:-1])) + np.array(counts) / 2
+    for xc, lbl in zip(group_centers, group_labels):
+        display = (group_name_map or {}).get(lbl, lbl).replace("Non-Selective", "NS")
+        ax.annotate(display, xy=(xc, -0.04), xycoords=ax.get_xaxis_transform(),
+                    ha="center", va="top", fontsize=20)
 
     ax.set_xlabel("Neuron Clusters", fontsize=26, labelpad=30)
-    fig.subplots_adjust(bottom=0.22)  # tweak as needed
-
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("Normalized variance",fontsize=24)
+    cbar.set_label("Normalized variance", fontsize=24)
+    fig.subplots_adjust(bottom=0.22)
     fig.set_tight_layout(True)
-    
     return fig, ax
 
 
-def plot_lesion_effects_across_clusters(model,
-                                        loader,
-                                        cluster_to_neurons,
-                                        t_start=1,
-                                        t_end=4,
-                                        num_samples=4,
-                                        DEVICE='cuda'):
+def plot_lesion_delta(original_losses, cluster_losses, fig, ax,
+                      cluster_order=None, put_y_label=True):
+    """Heatmap of (lesioned − original) loss per context × cluster."""
+    contexts = sorted(original_losses)
+    clusters = [c for c in (cluster_order or sorted(cluster_losses)) if c in cluster_losses]
 
+    diff = np.array([[cluster_losses[cl][ctx] - original_losses[ctx]
+                      for cl in clusters] for ctx in contexts])
+
+    im = ax.imshow(diff, aspect="auto", origin="upper", cmap="binary")
+    ax.set_xticks(range(len(clusters))); ax.set_xticklabels([str(c) for c in clusters], fontsize=16)
+    ax.set_xlabel("Lesioned cluster", fontsize=26)
+
+    ctx_arr    = np.array(contexts)
+    varying    = [i for i in range(ctx_arr.shape[1]) if len(np.unique(ctx_arr[:, i])) > 1]
+    ctx_labels = [f"{[int(ctx[i]) for i in varying]}" for ctx in contexts]
+
+    if put_y_label:
+        ax.set_yticks(range(len(contexts))); ax.set_yticklabels(ctx_labels, fontsize=8)
+        ax.set_ylabel("Contexts", fontsize=26)
+    else:
+        ax.set_yticks([]); ax.set_yticklabels([])
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("Lesioned Loss − Original Loss", fontsize=24)
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_lesion_reconstructions(model, loader, cluster_to_neurons,
+                                 t_start=1, t_end=4, num_samples=4):
+    """Visual comparison of original vs. cluster-lesioned reconstructions."""
     inputs, _, contexts = next(iter(loader))
     inputs, contexts = inputs.to(DEVICE), contexts.to(DEVICE)
 
-    figs,axs = [], []
-    def keep_axis_hide_ticks(ax_):
-        ax_.set_xticks([])
-        ax_.set_yticks([])
-        for s in ax_.spines.values():
-            s.set_visible(False)
+    def hide_ticks(ax_):
+        ax_.set_xticks([]); ax_.set_yticks([])
+        for s in ax_.spines.values(): s.set_visible(False)
 
+    figs, axs = [], []
     for b in range(num_samples):
-        sample_input  = inputs[:, b:b+1]
-        sample_context = contexts[b]
-
+        sample = inputs[:, b:b+1]
         with torch.no_grad():
-            baseline_recons = model(sample_input)[0].detach()
+            baseline = model(sample)[0].detach()
 
-        num_clusters = len(cluster_to_neurons)
-        nrows = 2 + num_clusters
-        fig, ax = plt.subplots(
-            nrows, t_end - t_start,
-            figsize=((t_end - t_start) * 3, nrows * 3),
-            constrained_layout=False  
-        )
+        n_clusters = len(cluster_to_neurons)
+        fig, ax = plt.subplots(2 + n_clusters, t_end - t_start,
+                               figsize=((t_end - t_start) * 3, (2 + n_clusters) * 3),
+                               constrained_layout=False)
         ax = np.atleast_2d(ax)
-        fig.subplots_adjust(left=0.18, top=0.97, hspace=0.1, wspace=0.1) 
+        fig.subplots_adjust(left=0.18, top=0.97, hspace=0.1, wspace=0.1)
 
-        ax[0, 0].set_ylabel("Ground Truth", fontsize=12, weight='bold', labelpad=12)
-        ax[1, 0].set_ylabel("Original\n Reconstruction", fontsize=12, weight='bold', labelpad=12)
+        ax[0, 0].set_ylabel("Ground Truth",           fontsize=12, weight="bold", labelpad=12)
+        ax[1, 0].set_ylabel("Original Reconstruction", fontsize=12, weight="bold", labelpad=12)
 
         for t_idx, t in enumerate(range(t_start, t_end)):
-            ax[0, t_idx].imshow(sample_input[t + 1, 0].cpu().permute(1, 2, 0).numpy())
-
-            out = baseline_recons[t, 0].cpu().permute(1, 2, 0).clamp(0, 1).numpy()
-
-            ax[1, t_idx].imshow(out)
-
-            if t_idx == 0:
-                keep_axis_hide_ticks(ax[0, t_idx])
-                keep_axis_hide_ticks(ax[1, t_idx])
-            else:
-                ax[0, t_idx].axis("off")
-                ax[1, t_idx].axis("off")
-
+            ax[0, t_idx].imshow(sample[t + 1, 0].cpu().permute(1, 2, 0).numpy())
+            ax[1, t_idx].imshow(baseline[t, 0].cpu().permute(1, 2, 0).clamp(0, 1).numpy())
+            hide_ticks(ax[0, t_idx]); hide_ticks(ax[1, t_idx])
             ax[-1, t_idx].set_xlabel(f"t={t+1}", fontsize=12)
 
-        for i, cluster_id in enumerate(sorted(cluster_to_neurons.keys())):
+        for i, cid in enumerate(sorted(cluster_to_neurons)):
             row = i + 2
-            ax[row, 0].set_ylabel(f"Lesion C{cluster_id}", fontsize=12, weight='bold', labelpad=12)
-
-            new_network = model.create_lesioned_instance(cluster_to_neurons[cluster_id]).to(DEVICE)
+            ax[row, 0].set_ylabel(f"Lesion C{cid}", fontsize=12, weight="bold", labelpad=12)
+            lesioned = model.create_lesioned_instance(cluster_to_neurons[cid]).to(DEVICE)
             with torch.no_grad():
-                inhib_recons = new_network(sample_input)[0].detach()
-
+                recon = lesioned(sample)[0].detach()
             for t_idx, t in enumerate(range(t_start, t_end)):
+                ax[row, t_idx].imshow(recon[t, 0].cpu().permute(1, 2, 0).clamp(0, 1).numpy())
+                hide_ticks(ax[row, t_idx])
 
-                out = inhib_recons[t, 0].cpu().permute(1, 2, 0).clamp(0, 1).numpy()
+        figs.append(fig); axs.append(ax)
 
-                ax[row, t_idx].imshow(out)
-                keep_axis_hide_ticks(ax[row, t_idx]) 
-
-        figs.append(fig)
-        axs.append(ax)
-    return figs, axs,[int(c) for c in sample_context[:3]]
+    return figs, axs, [int(c) for c in contexts[0][:3]]
 
 
+# ── Top-level orchestration ────────────────────────────────────────────────────
 
-def plot_cluster_and_lesions(config,model,loader,fig=None, ax=None):
-    
-    activations, contexts = get_rnn_activities_and_sources_for_loader_for_clustering(model, loader)
-    max_num_clusters, scores, norm_var_activities_per_context, active_units, labels = get_optimal_n_cluster(model, activations=activations, contexts=contexts, time_variance=False, device=DEVICE)
-    unique_contexts, inv = contexts.unique(dim=0, return_inverse=True)
-
-    if max_num_clusters == 1:
-        print("Only one cluster found, skipping plotting.")
-        return None,None,None,None
-    print(f"Optimal number of clusters: {max_num_clusters}, Silhouette scores: {scores}")
-
-    (sorted_order, group_labels, group_boundaries,
-    peak_map, informative_indices, cluster_profiles) = analyze_and_sort_clusters(
-        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
-        contexts_unique=unique_contexts.cpu(),
-        labels=labels,
-        selectivity_threshold= 0.2,
-        purity_threshold= 0.5
-    )
-    fig_cluster,ax_cluster = plt.subplots(1, 1, figsize=(10, 8))
-    
+def _dataset_group_name_map(config):
     if "sketch" in config.dataset.name:
-        group_name_map = {"C0":"shape","C1":"color","C2":"position"}
-        
-    elif "ddd" in config.dataset.name:
-        # next_shape_offset,next_floor_offset,next_wall_offset,next_object_offset,next_scale_offset,next_orientation_offset
-        group_name_map = {"C0":"shape","C1":"floor hue","C2":"wall hue","C3":"scale"}
-    
-    plot_sequentially_sorted_clusters(
-        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
-        contexts_unique=unique_contexts.cpu(),
-        labels=labels,
-        final_cluster_order=sorted_order,
-        group_labels=group_labels,
-        group_boundaries_by_cluster_count=group_boundaries,
-        group_name_map=group_name_map,
-        put_y_label= not "auto" in config.model.type,
-        fig=fig_cluster,
-        ax=ax_cluster
-    )
-
-    fig_lesion,ax_lesion = plt.subplots(1, 1, figsize=(10, 8))
-    cluster_losses, original_network_losses,cluster_to_neurons = computer_lesioned_cluster_losses(model,
-                                                                           dataloader=loader,
-                                                                           active_units=active_units,
-                                                                           labels=labels,
-                                                                           number_of_clusters=max_num_clusters)
-
-    plot_cluster_lesion_delta(
-        original_network_losses=original_network_losses,
-        lesioned_cluster_loss=cluster_losses,
-        cluster_order=sorted_order, 
-        put_y_label= not "auto" in config.model.type,
-        fig=fig_lesion,
-        ax=ax_lesion)
-    
-    figs,axs,context_for_lesion = plot_lesion_effects_across_clusters(
-    model=model,
-    loader=loader,
-    cluster_to_neurons=cluster_to_neurons,
-    t_start=1, 
-    t_end = 3,  
-    num_samples=1, 
-    DEVICE=DEVICE)
-        
-    return fig_cluster,ax_cluster,fig_lesion,ax_lesion,figs,axs,context_for_lesion
-    
-
-def plot_cluster_lesion_delta(original_network_losses,
-                              lesioned_cluster_loss,
-                              fig,
-                              ax,
-                              put_y_label=True,
-                              cluster_order=None):
+        return {"C0": "shape", "C1": "color", "C2": "position"}
+    if "ddd" in config.dataset.name:
+        return {"C0": "shape", "C1": "floor hue", "C2": "wall hue", "C3": "scale"}
+    return {}
 
 
-    
-    contexts = sorted(original_network_losses.keys(), key=lambda x: tuple((x[i] for i in range(len(x)))))
-    clusters = sorted(lesioned_cluster_loss.keys())
-
-    if cluster_order is not None:
-        clusters = [c for c in cluster_order if c in lesioned_cluster_loss]
-    else:
-        clusters = sorted(lesioned_cluster_loss.keys())
-
-    diff = np.zeros((len(contexts), len(clusters)))
-    for i, ctx in enumerate(contexts):
-        orig = original_network_losses[ctx]
-        for j, clus in enumerate(clusters):
-            new = lesioned_cluster_loss[clus][ctx]
-            diff[i, j] = new - orig
-
-    ax.set_xticks(np.arange(len(clusters)))
-    ax.set_xticklabels([str(c) for c in clusters], fontsize=16)
-    ax.set_xlabel("Lesioned cluster",fontsize=26)
-    
-    contexts_array = np.array(contexts)
-        
-    n_dims = contexts_array.shape[1]
-    varying_dims = [i for i in range(n_dims) if len(np.unique(contexts_array[:, i])) > 1]
-
-    ctx_labels = []
-    for cs in contexts:
-        varying_cs = [int(cs[i]) for i in varying_dims]
-        ctx_labels.append(f'{varying_cs}')
-    
-    if put_y_label:
-        ax.set_yticks(np.arange(len(contexts)))
-        ax.set_yticklabels(ctx_labels, fontsize=8)
-        ax.set_ylabel("Contexts",fontsize=26)
-    else:
-        ax.set_yticks([])
-        ax.set_yticklabels([])
-
-    im = ax.imshow(diff, aspect='auto', origin='upper', cmap='binary')
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label(" Lesioned Loss − Original Loss",fontsize=24)
-
-    fig.set_tight_layout(True)
-    return fig, ax
-    
-    
-    
-
-def plot_sorted_cluster(config,
-                        model,
-                        loader,
-                        fig=None,
-                        ax=None,
-                        selectivity_threshold=0.1,
-                        purity_threshold=0.5):
+def plot_cluster_and_lesions(config, model, loader):
     activations, contexts = get_rnn_activities_and_sources_for_loader_for_clustering(model, loader)
-    max_num_clusters, scores, norm_var_activities_per_context, active_units, labels = get_optimal_n_cluster(model, activations=activations, contexts=contexts, time_variance=False, device=DEVICE)
-    
-    if max_num_clusters ==1:
-        print("Only one cluster found, skipping plotting.")
-        return None,None
-    
-    unique_contexts, inv = contexts.unique(dim=0, return_inverse=True)
+    best_k, scores, norm_var, active_units, labels = get_optimal_n_clusters(
+        model, activations=activations, contexts=contexts, time_variance=False)
+    unique_ctx, _ = contexts.unique(dim=0, return_inverse=True)
 
-    print(f"Optimal number of clusters: {max_num_clusters}, Silhouette scores: {scores}")
+    if best_k == 1:
+        print("Only one cluster found, skipping.")
+        return None, None, None, None, None, None, None
 
-    (sorted_order, group_labels, group_boundaries,
-    peak_map, informative_indices, cluster_profiles) = analyze_and_sort_clusters(
-        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
-        contexts_unique=unique_contexts.cpu(),
-        labels=labels,
-        selectivity_threshold= selectivity_threshold,
-        purity_threshold= purity_threshold
-    )
-    if fig is None or ax is None:
-        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
-        
-    plot_sequentially_sorted_clusters(
-        norm_var_activities_per_context=norm_var_activities_per_context.cpu().numpy(),
-        contexts_unique=unique_contexts.cpu(),
-        labels=labels,
-        final_cluster_order=sorted_order,
-        group_labels=group_labels,
-        group_boundaries_by_cluster_count=group_boundaries,
-        put_y_label= "auto" in config.model.type,
-        fig=fig,
-        ax=ax
-    )
+    print(f"Optimal clusters: {best_k}, silhouette scores: {scores}")
 
-    return fig,ax 
+    sorted_order, group_labels, group_boundaries, peak_map, informative, profiles = \
+        analyze_and_sort_clusters(norm_var.cpu().numpy(), unique_ctx.cpu(), labels,
+                                   selectivity_threshold=0.2, purity_threshold=0.5)
+
+    is_auto = "auto" in config.model.type
+    group_map = _dataset_group_name_map(config)
+
+    fig_c, ax_c = plt.subplots(figsize=(10, 8))
+    plot_sorted_clusters(norm_var.cpu().numpy(), unique_ctx.cpu(), labels,
+                          sorted_order, group_labels, group_boundaries,
+                          fig_c, ax_c, put_y_label=not is_auto, group_name_map=group_map)
+
+    cluster_losses, orig_losses, cluster_to_neurons = compute_lesioned_cluster_losses(
+        model, loader, active_units, labels, best_k)
+
+    fig_l, ax_l = plt.subplots(figsize=(10, 8))
+    plot_lesion_delta(orig_losses, cluster_losses, fig_l, ax_l,
+                      cluster_order=sorted_order, put_y_label=not is_auto)
+
+    figs, axs, ctx_sample = plot_lesion_reconstructions(
+        model, loader, cluster_to_neurons, t_start=1, t_end=3, num_samples=1)
+
+    return fig_c, ax_c, fig_l, ax_l, figs, axs, ctx_sample
