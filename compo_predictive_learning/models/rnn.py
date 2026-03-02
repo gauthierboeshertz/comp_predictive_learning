@@ -85,6 +85,18 @@ class JitLeakyRNNLayer(jit.ScriptModule):
             outputs += [out]
         return torch.stack(outputs)
 
+    def one_step_forward(self, input:Tensor, state:Tensor):
+        # type: (Tensor,Tensor) -> Tensor
+        # input is batch_size x input_dim
+        # state is batch_size x hidden_dim
+        inputs_dot = self.input_layer(input) 
+        if self.noise > 0:
+            inputs_dot = inputs_dot + torch.randn_like(inputs_dot)*self.noise
+        out = self.activation(state)
+        new_state = state + self.alpha * (-state + inputs_dot + self.weight_hh(out))
+        out = self.activation(new_state)
+        return out, new_state
+    
     def create_new_instance(self,new_params = {},copy_weights=True):
         params = {'input_dim':self.input_dim,
                 'hidden_dim':self.hidden_dim,
@@ -99,3 +111,12 @@ class JitLeakyRNNLayer(jit.ScriptModule):
         if copy_weights:
             new_model.load_state_dict(self.state_dict())
         return new_model
+
+
+def jacobian_hnext_wrt_h_for_sequence(rnn, x):
+    grads = []
+    state = torch.zeros(x.shape[1], rnn.hidden_dim).to(x.device)
+    for t in range(x.shape[0]): 
+        grads.append(torch.autograd.functional.jacobian(lambda hh: rnn.one_step_forward(x[t], hh)[0], state)[0].detach().cpu())
+        state = rnn.one_step_forward(x[t], state)[1].detach()
+    return torch.stack(grads)

@@ -3,6 +3,7 @@ import torch.nn as nn
 from typing import List, Tuple,Optional
 from torch import Tensor
 import hydra
+from compo_predictive_learning.models.rnn import  jacobian_hnext_wrt_h_for_sequence
 
 class RNNAE(nn.Module):
     def __init__(self, 
@@ -30,6 +31,12 @@ class RNNAE(nn.Module):
         cnn_encoded = self.encoder(input)
         rnn_out = self.rnn(cnn_encoded)
         return self.decoder(rnn_out),cnn_encoded,rnn_out,None
+    
+    def jacobian_of_rnn_hidden_to_last_hidden(self, x):
+        cnn_encoded = self.encoder(x)
+        print(jacobian_hnext_wrt_h_for_sequence(self.rnn, cnn_encoded).shape)
+        return jacobian_hnext_wrt_h_for_sequence(self.rnn, cnn_encoded)
+        
     
     def loss(self, data):
         outputs,cnn_encoded,rnn_out,enc_context = self(data)
