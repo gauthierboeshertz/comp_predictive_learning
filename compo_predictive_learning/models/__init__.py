@@ -12,14 +12,6 @@ def create_model(config):
         config.rnn.input_dim = config.encoder.output_dim
         config.decoder.input_dim = config.rnn.hidden_dim
         
-    elif "dsprites" in config.dataset.name :
-        num_input_channels = 1
-        width = 64
-        height = 64
-        config.encoder.input_dim = [num_input_channels,width,height]
-        config.decoder.output_dim = [num_input_channels,width,height]
-        config.rnn.input_dim = config.encoder.output_dim
-        config.decoder.input_dim = config.rnn.hidden_dim
     elif "dddshapes" in config.dataset.name:
         num_input_channels = 3
         width = 64

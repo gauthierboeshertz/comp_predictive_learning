@@ -67,6 +67,8 @@ def plot_context_weights_heatmaps(W, all_neurons_groups, context_to_cluster):
     ax.set_xticklabels([cid for _, cid in ordered_clusters], rotation=90, fontsize=16)
     ax.set_yticklabels([cid for _, cid in ordered_clusters], fontsize=16)
 
+    ax.set_xlabel("Target Cluster", fontsize=20)
+    ax.set_ylabel("Source Cluster", fontsize=20)
     boundaries = [i for i in range(n_clusters - 1) if ordered_clusters[i][0] != ordered_clusters[i+1][0]]
     for b in boundaries:
         ax.axhline(b + 0.5,  linewidth=1.5)
@@ -74,6 +76,7 @@ def plot_context_weights_heatmaps(W, all_neurons_groups, context_to_cluster):
             
     cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label(label="Mean Weight",fontsize=22)
+    cbar.ax.tick_params(labelsize=16)  
     fig.tight_layout()
 
     return {

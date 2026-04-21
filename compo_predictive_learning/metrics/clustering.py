@@ -8,7 +8,8 @@ from sklearn import metrics
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from matplotlib.transforms import blended_transform_factory
 
 @torch.no_grad()
 def get_rnn_activities_and_sources_for_loader_for_clustering(model,loader,device='cuda'):
@@ -265,9 +266,10 @@ def plot_sorted_clusters(norm_var, contexts_unique, labels,
                     ha="center", va="top", fontsize=20)
 
     ax.set_xlabel("Neuron Clusters", fontsize=26, labelpad=30)
+    ax.xaxis.set_label_coords(0.5, -0.14)  # <- make this more negative to go lower
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label("Normalized variance", fontsize=24)
-    fig.subplots_adjust(bottom=0.22)
+    # fig.subplots_adjust(bottom=0.22)
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -354,7 +356,8 @@ def _dataset_group_name_map(config):
     if "sketch" in config.dataset.name:
         return {"C0": "shape", "C1": "color", "C2": "position"}
     if "ddd" in config.dataset.name:
-        return {"C0": "shape", "C1": "floor hue", "C2": "wall hue", "C3": "scale"}
+        # next_floor_offset,next_wall_offset,next_object_offset,next_scale_offset,next_shape_offset,next_orientation_offset
+        return {"C1": "wall \n hue", "C2": "object \n hue", "C3": "scale", "C4": "shape"}
     return {}
 
 

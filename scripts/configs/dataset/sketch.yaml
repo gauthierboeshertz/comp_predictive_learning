@@ -5,6 +5,7 @@
   canvas_size: 64
   unit_length: 16
   premake_videos: False
+  num_primitives: 7
   scales: [1]
   colors: ["white","red","green","blue"]
   symbol_timestep: 0

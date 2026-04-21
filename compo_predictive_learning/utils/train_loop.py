@@ -83,10 +83,10 @@ def train_loop(config,
             with torch.no_grad():
                 for val_batch in val_loader:
                     val_imgs, val_latents, val_contexts = val_batch
-                    out = model.loss(val_imgs)
-                    loss = out[0]
-                    if len(out) == 5:
-                        val_accs.append(out[4].item())
+                    val_out = model.loss(val_imgs)
+                    loss = val_out[0]
+                    if len(val_out) == 5:
+                        val_accs.append(val_out[4].item())
                     val_loss.append(loss.item())
                 validation_losses.append(np.mean(val_loss))
 

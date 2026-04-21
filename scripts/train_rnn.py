@@ -11,7 +11,7 @@ from compo_predictive_learning.models import create_model
 import hydra
 import logging
 from collections import defaultdict
-from compo_predictive_learning.datasets import make_dsprites_dataloaders, make_sketch_dataloaders, make_dddshapes_dataloaders
+from compo_predictive_learning.datasets import  make_sketch_dataloaders, make_dddshapes_dataloaders
 from compo_predictive_learning.utils.train_loop import train_loop
 from compo_predictive_learning.utils.make_all_plots import make_all_plots
 logger = logging.getLogger(__name__)
@@ -57,9 +57,6 @@ def main(config):
     set_seed(config.seed)   
     if "sketch" in config.dataset.name:
         pretrain_loader,val_loader, smaller_pretrain_loader,analysis_loader,classification_metric_train_loaders, classification_metric_val_loaders,latent_names, train_contexts,val_contexts = make_sketch_dataloaders(config)
-    
-    elif "dsprites" in config.dataset.name:
-        pretrain_loader, val_loader, smaller_pretrain_loader,analysis_loader ,classification_metric_train_loaders, classification_metric_val_loaders,latent_names, train_contexts,val_contexts = make_dsprites_dataloaders(config)
     elif "dddshapes" in config.dataset.name:
         pretrain_loader, val_loader, smaller_pretrain_loader,analysis_loader ,classification_metric_train_loaders, classification_metric_val_loaders,latent_names, train_contexts,val_contexts = make_dddshapes_dataloaders(config)
     else:

@@ -104,8 +104,7 @@ class JitLeakyRNNLayer(jit.ScriptModule):
                 'leak_alpha':self.leak_alpha,
                 'noise':self.noise,
                 'rnn_init':self.rnn_init,
-                'mlp_dynamics':self.mlp_dynamics,
-                'use_norm_layer':self.use_norm_layer}
+                'mlp_dynamics':self.mlp_dynamics}
         params.update(new_params)
         new_model = JitLeakyRNNLayer(**params)
         if copy_weights:

@@ -1,0 +1,111 @@
+model:
+  _target_: compo_predictive_learning.models.rnn_ae.RNNAE
+  encoder_cfg: null
+  decoder_cfg: null
+  rnn_cfg: null
+  type: pred
+  name: ae_${.type}
+dataset:
+  num_train_sequences_per_context: 256
+  num_val_sequences_per_context: 128
+  contexts:
+  - next_shape_offset
+  - next_floor_offset
+  - next_wall_offset
+  - next_object_offset
+  - next_scale_offset
+  - next_orientation_offset
+  next_shape_offset:
+  - 0
+  - 1
+  - 2
+  next_scale_offset:
+  - 0
+  - 1
+  - 2
+  next_orientation_offset:
+  - 0
+  next_floor_offset:
+  - 0
+  next_wall_offset:
+  - 0
+  - 1
+  - 2
+  next_object_offset:
+  - 0
+  - 1
+  - 2
+  one_floor: true
+  one_wall: false
+  one_object: false
+  one_scale: false
+  one_shape: false
+  one_orientation: true
+  subsample_task_abstract: 1.0
+  subsample_shape: 1
+  subsample_scale: 0.5
+  subsample_orientation: 1
+  subsample_floor: 1
+  subsample_wall: 0.5
+  subsample_object: 0.5
+  seq_len: 6
+  path: /home/ghb24/paper_git/comp_predictive_learning/data/3dshapes.h5
+  color_mode: rgb
+  name: dddshapes_${.seq_len}/${.num_train_sequences_per_context}_${.num_val_sequences_per_context}/${.next_floor_offset}/${.next_wall_offset}/${.next_object_offset}/${.next_scale_offset}/${.next_shape_offset}/${.next_orientation_offset}/${.one_floor}_${.one_wall}_${.one_object}_${.one_scale}_${.one_shape}_${.one_orientation}_${.subsample_shape}_${.subsample_scale}_${.subsample_orientation}_${.subsample_floor}_${.subsample_wall}_${.subsample_object}
+rnn:
+  _target_: compo_predictive_learning.models.rnn.JitLeakyRNNLayer
+  input_dim: null
+  hidden_dim: 512
+  noise: 0.05
+  rnn_init: eye
+  activation: relu
+  leak_alpha: 1
+  mlp_dynamics: false
+  name: rnn_${.hidden_dim}_${.activation}_${.leak_alpha}_${.mlp_dynamics}_${.rnn_init}_${.noise}
+encoder:
+  _target_: compo_predictive_learning.models.encoders.ConvEncoder
+  input_dim: null
+  hidden_dims:
+  - 16
+  - 16
+  - 16
+  output_dim: 512
+  activation: relu
+  norm_layer: none
+  max_pooling: false
+  name: conv_${.hidden_dims}_${.activation}_${.norm_layer}_${.max_pooling}_${.output_dim}
+decoder:
+  _target_: compo_predictive_learning.models.decoders.ConvDecoder
+  input_dim: null
+  hidden_dims:
+  - 16
+  - 16
+  - 16
+  output_dim: null
+  activation: relu
+  norm_layer: none
+  name: conv_${.hidden_dims}_${.activation}_${.norm_layer}
+seed: 1
+save_models: false
+one_context_per_batch: true
+no_redo: true
+compute_clustering: true
+compute_metrics: true
+use_whole_drawing: false
+one_hot_context: false
+support_type: full
+subsample_contexts_ratio: 0.8
+support_connectivity: 1
+make_plots: true
+train_loop:
+  num_steps: 15000
+  eval_every: 1000
+  compute_metrics_every: 1000
+  make_plots_every: 1000
+  pretrain_lr: 0.001
+  pretrain_decay: 0.01
+  pretrain_act_decay: 0.0001
+  pretrain_act_l1: 0
+  pretrain_weight_l1: 0
+  batch_size: 128
+  save_model_every: 100000000

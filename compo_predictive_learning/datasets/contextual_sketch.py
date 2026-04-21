@@ -13,6 +13,8 @@ VISUALIZATION_COLOR_PALETTE = ['blue', 'green', 'red', 'purple', 'orange', 'cyan
 
 SEMI_CIRCLE_START = 170
 
+LATENT_ORDER = ['primitive', 'scale', 'color', 'position']
+
 def randint_from_union(a, b):
     assert 0 < a <= b, "Require 0 < a <= b"
     left_range = list(range(-b, -a + 1))   
@@ -208,6 +210,7 @@ class SketchDataset(torch.utils.data.Dataset):
                  sequence_length=4,
                  canvas_size=64,
                  unit_length=12,
+                 num_primitives=NUMBER_OF_PRIMITIVES,
                  scales=[1],
                  colors = ["white"],
                  next_primitive_offset=0,
@@ -232,7 +235,8 @@ class SketchDataset(torch.utils.data.Dataset):
         self.canvas_size = canvas_size
         self.unit_length = unit_length
         self.scales = scales
-        self.all_primitives = self.create_primitives()
+        self.num_primitives = num_primitives
+        self.all_primitives = self.create_primitives(num_primitives)
         self.primitive_names = list(self.all_primitives.keys())
         self.premake_videos = premake_videos
         self.final_images = []
@@ -286,7 +290,7 @@ class SketchDataset(torch.utils.data.Dataset):
     def get_output_names(self):
         return ['primitive', 'scale', 'color', 'quadrant']
 
-    def create_primitives(self):
+    def create_primitives(self,num_primitives):
         ul, ul_half = self.unit_length, self.unit_length / 2.0
         shapes_new = {
             'h_line': [{'type': 'line', 'start': (-ul_half, 0), 'end': (ul_half, 0)}],
@@ -309,8 +313,11 @@ class SketchDataset(torch.utils.data.Dataset):
                 {'type': 'line', 'start': (-ul_half, ul_half), 'end': (-ul_half, -ul_half)}, # left
                 ],
         }
-
-        return shapes_new
+        if num_primitives <= len(shapes_new):
+            selected_keys = list(shapes_new.keys())[:num_primitives]
+            return {key: shapes_new[key] for key in selected_keys}
+        else:
+            return shapes_new
 
     def make_prim_sequence(self, metadata,randomize_shape_offset_in_sequence_images):
         
@@ -371,6 +378,7 @@ def make_dataset(num_samples,
                     sequence_length=config.dataset.sequence_length,
                     canvas_size=config.dataset.canvas_size,
                     unit_length=config.dataset.unit_length,
+                    num_primitives=config.dataset.num_primitives,
                     scales=config.dataset.scales,
                     colors= config.dataset.colors,
                     next_primitive_offset=next_primitive_offset,
@@ -421,6 +429,7 @@ def make_sketch_loader(config,
                     sequence_length=config.dataset.sequence_length,
                     canvas_size=config.dataset.canvas_size,
                     unit_length=config.dataset.unit_length,
+                    num_primitives=config.dataset.num_primitives,
                     scales=config.dataset.scales,
                     colors=config.dataset.colors,
                     colorize_white=config.dataset.colorize_white,

@@ -16,7 +16,7 @@ def plot_mean_cluster_activity(model,
                             cluster_order,
                             context_to_cluster,
                             noiseless=True,
-                            num_samples=4,
+                            num_contexts=4,
                             DEVICE='cuda'):
     
     unique_context_groups = sorted(context_to_cluster.keys())
@@ -25,7 +25,7 @@ def plot_mean_cluster_activity(model,
     cluster_to_group_map = {cid: gid for gid, cids in context_to_cluster.items() for cid in cids}
 
     valid_cluster_order = [cid for cid in cluster_order if cid in cluster_to_neurons]
-    fig, axs = plt.subplots(1, num_samples, figsize=(8 * num_samples, 7), sharey=True)
+    fig, axs = plt.subplots(1, num_contexts, figsize=(8 * num_contexts, 7), sharey=True)
     axs = np.atleast_1d(axs).ravel()
 
     if noiseless:
@@ -37,7 +37,7 @@ def plot_mean_cluster_activity(model,
 
     context_showed = []
     for b, (inputs, _, contexts) in enumerate(loader):
-        if b >= num_samples:
+        if b >= num_contexts:
             break
         
         inputs = inputs.to(DEVICE)
@@ -77,13 +77,15 @@ def plot_mean_cluster_activity(model,
                         color = base_color 
                     else:
                         color = sns.light_palette(base_color, n_colors=5)[1]
-
-                axs[b].plot(mean_trace, label=f"Cluster {cluster_id}", linewidth=2.5, color=color)
+                if is_most_active:
+                     axs[b].plot(mean_trace, label=f"Cluster {cluster_id} {f'(C{cluster_id})' if cluster_id in [0,4] else ''}", linewidth=2.5, color=color)
+                else:
+                    axs[b].plot(mean_trace, linewidth=2.5, color=color)
 
         axs[0].set_xlabel("Time Step",fontsize=24)
         axs[0].set_ylabel("Mean Activity", fontsize=24)
         axs[b].grid(True, linestyle='--', alpha=0.6)
-        axs[b].legend(loc='upper right', fontsize='small') 
+        axs[b].legend(loc='upper right', fontsize=16) 
         context_showed.append([int(c) for c in contexts[0,:3]])
 
     fig.tight_layout(rect=[0, 0, 1, 0.95]) 
@@ -188,10 +190,12 @@ def plot_global_cluster_correlation_with_context_blocks(model,
     ax.set_yticks(np.arange(n_clusters))
     ax.set_xticklabels([cid for cid in ordered_clusters], rotation=90, fontsize=21)
     ax.set_yticklabels([cid for cid in ordered_clusters], fontsize=21)
-
+    ax.set_xlabel("Cluster", fontsize=24)
+    ax.set_ylabel("Cluster", fontsize=24)
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("Correlation", fontsize=28)
+    cbar.ax.tick_params(labelsize=16)  
+    cbar.set_label("Correlation", fontsize=32)
 
     fig.tight_layout()
     return fig,ax
@@ -243,7 +247,7 @@ def network_activity_plots(model,loader=None,activations=None,contexts=None,nois
                                sorted_order,
                                context_to_cluster,
                                noiseless=noiseless,
-                               num_samples=2)
+                               num_contexts=1)
     figsaxs[f'mean_cluster_activity_{context_showed}'] = (fig, axs)
     fig,axs = plot_global_cluster_correlation_with_context_blocks(model,
                                                         loader,

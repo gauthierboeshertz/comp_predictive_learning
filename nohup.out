@@ -1,0 +1,1336 @@
+/home/ghb24/paper_git/er/comp_predictive_learning/scripts/train_rnn.py:54: UserWarning: 
+The version_base parameter is not specified.
+Please specify a compatability version level, or None.
+Will assume defaults for version 1.1
+  @hydra.main(config_path="configs",config_name="train_rnn")
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/hydra/_internal/defaults_list.py:251: UserWarning: In 'train_rnn': Defaults list is missing `_self_`. See https://hydra.cc/docs/1.2/upgrades/1.0_to_1.1/default_composition_order for more information
+  warnings.warn(msg, UserWarning)
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/hydra/_internal/hydra.py:119: UserWarning: Future Hydra versions will no longer change working directory at job runtime by default.
+See https://hydra.cc/docs/1.2/upgrades/1.1_to_1.2/changes_to_job_working_dir/ for more information.
+  ret = run_job(
+Found a good split after 1 tries.
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/torch/utils/data/sampler.py:76: UserWarning: `data_source` argument is not used and will be removed in 2.2.0.You may still have custom implementation that utilizes it.
+  warnings.warn(
+Output shape from conv layers 1024
+[2026-03-30 22:52:11,754][__main__][INFO] - Device: cuda
+model:
+  _target_: compo_predictive_learning.models.rnn_ae.RNNAE
+  encoder_cfg: null
+  decoder_cfg: null
+  rnn_cfg: null
+  type: pred
+  name: ae_${.type}
+dataset:
+  num_pretrain_drawings_per_context: 512
+  num_val_drawings_per_context: 128
+  num_test_drawings_per_context: 128
+  colorize_white: false
+  canvas_size: 64
+  unit_length: 16
+  premake_videos: false
+  num_primitives: 4
+  scales:
+  - 1
+  colors:
+  - white
+  - red
+  - green
+  - blue
+  symbol_timestep: 0
+  sequence_length: 6
+  noisy_in_quadrant_locations: false
+  contexts:
+  - next_primitive_offset
+  - next_color_offset
+  - next_position_offset
+  - next_scale_offset
+  next_primitive_offset:
+  - 0
+  - 1
+  next_scale_offset:
+  - 0
+  next_color_offset:
+  - 0
+  - 1
+  next_position_offset:
+  - 0
+  - 1
+  name: sketch_${.sequence_length}/${.colors}/${.scales}/${.colorize_white}/${.scales}_${.num_pretrain_drawings_per_context}_${.num_val_drawings_per_context}_${.num_test_drawings_per_context}_${.canvas_size}_${.unit_length}/${.contexts}/${.next_primitive_offset}/${.next_scale_offset}/${.next_position_offset}/${.next_color_offset}
+rnn:
+  _target_: compo_predictive_learning.models.rnn.JitLeakyRNNLayer
+  input_dim: 512
+  hidden_dim: 512
+  noise: 0.05
+  rnn_init: eye
+  activation: relu
+  leak_alpha: 1
+  mlp_dynamics: false
+  name: rnn_${.hidden_dim}_${.activation}_${.leak_alpha}_${.mlp_dynamics}_${.rnn_init}_${.noise}
+encoder:
+  _target_: compo_predictive_learning.models.encoders.ConvEncoder
+  input_dim:
+  - 3
+  - 64
+  - 64
+  hidden_dims:
+  - 16
+  - 16
+  - 16
+  output_dim: 512
+  activation: relu
+  norm_layer: none
+  max_pooling: false
+  name: conv_${.hidden_dims}_${.activation}_${.norm_layer}_${.max_pooling}_${.output_dim}
+decoder:
+  _target_: compo_predictive_learning.models.decoders.ConvDecoder
+  input_dim: 512
+  hidden_dims:
+  - 16
+  - 16
+  - 16
+  output_dim:
+  - 3
+  - 64
+  - 64
+  activation: relu
+  norm_layer: none
+  name: conv_${.hidden_dims}_${.activation}_${.norm_layer}
+seed: 0
+save_models: false
+one_context_per_batch: true
+no_redo: true
+compute_clustering: true
+compute_metrics: true
+use_whole_drawing: false
+one_hot_context: false
+support_type: full
+subsample_contexts_ratio: 0.8
+support_connectivity: 1
+make_plots: true
+train_loop:
+  num_steps: 5000
+  eval_every: 256
+  compute_metrics_every: 256
+  make_plots_every: -1
+  pretrain_lr: 0.001
+  pretrain_decay: 0.001
+  pretrain_act_decay: 0.01
+  pretrain_act_l1: 0
+  pretrain_weight_l1: 0
+  batch_size: 128
+  save_model_every: 100000000
+
+RNNAE(
+  (encoder): ConvEncoder(
+    (conv_layers): Sequential(
+      (0): Conv2d(3, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (1): ReLU(inplace=True)
+      (2): Conv2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (3): ReLU(inplace=True)
+      (4): Conv2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (5): ReLU(inplace=True)
+    )
+    (fc): Linear(in_features=1024, out_features=512, bias=True)
+  )
+  (rnn): JitLeakyRNNLayer(
+    (input_layer): RecursiveScriptModule(original_name=Linear)
+    (weight_hh): RecursiveScriptModule(original_name=Linear)
+    (activation): RecursiveScriptModule(original_name=ReLU)
+  )
+  (decoder): ConvDecoder(
+    (fc): Linear(in_features=512, out_features=1024, bias=True)
+    (conv_layers): Sequential(
+      (0): ConvTranspose2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1), bias=False)
+      (1): ReLU(inplace=True)
+      (2): ConvTranspose2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1), bias=False)
+      (3): ReLU(inplace=True)
+    )
+    (output_layer): ConvTranspose2d(16, 3, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1))
+  )
+  (loss_fn): MSELoss()
+  (activation): Identity()
+)
+[2026-03-30 22:52:11,761][__main__][INFO] - -----------------
+[2026-03-30 22:52:11,761][__main__][INFO] - Pretraining
+[2026-03-30 22:52:11,761][__main__][INFO] - -----------------
+[2026-03-30 22:52:12,906][__main__][INFO] - Step 1/5000, Training loss: 0.0279,  Regularization loss: 0.0280, Validation loss: 0.0277
+Output shape from conv layers 1024
+Not enough samples for clustering.
+[2026-03-30 22:52:14,554][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:52:14,554][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:52:14,554][__main__][INFO] - primitive_val_classifier_gener: 0.3125
+[2026-03-30 22:52:14,554][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:52:14,554][__main__][INFO] - color_val_classifier_gener    : 0.1875
+[2026-03-30 22:52:14,554][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:52:14,554][__main__][INFO] - position_val_classifier_gener : 0.3125
+[2026-03-30 22:52:14,554][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:52:14,554][__main__][INFO] - optimal_n_clusters            : 1
+[2026-03-30 22:52:56,840][__main__][INFO] - Step 257/5000, Training loss: 0.0084,  Regularization loss: 0.0085, Validation loss: 0.0066
+Output shape from conv layers 1024
+[2026-03-30 22:52:58,418][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:52:58,418][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:52:58,418][__main__][INFO] - primitive_val_classifier_gener: 0.3125
+[2026-03-30 22:52:58,418][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:52:58,418][__main__][INFO] - color_val_classifier_gener    : 0.4375
+[2026-03-30 22:52:58,418][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:52:58,418][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 22:52:58,418][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:52:58,418][__main__][INFO] - optimal_n_clusters            : 2
+[2026-03-30 22:53:39,730][__main__][INFO] - Step 513/5000, Training loss: 0.0040,  Regularization loss: 0.0041, Validation loss: 0.0045
+Output shape from conv layers 1024
+[2026-03-30 22:53:41,317][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:53:41,317][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:53:41,317][__main__][INFO] - primitive_val_classifier_gener: 0.75
+[2026-03-30 22:53:41,317][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:53:41,318][__main__][INFO] - color_val_classifier_gener    : 0.625
+[2026-03-30 22:53:41,318][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:53:41,318][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 22:53:41,318][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:53:41,318][__main__][INFO] - optimal_n_clusters            : 6
+[2026-03-30 22:54:23,070][__main__][INFO] - Step 769/5000, Training loss: 0.0024,  Regularization loss: 0.0025, Validation loss: 0.0044
+Output shape from conv layers 1024
+[2026-03-30 22:54:24,698][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:54:24,698][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:54:24,698][__main__][INFO] - primitive_val_classifier_gener: 0.75
+[2026-03-30 22:54:24,698][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:54:24,698][__main__][INFO] - color_val_classifier_gener    : 0.6875
+[2026-03-30 22:54:24,698][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:54:24,698][__main__][INFO] - position_val_classifier_gener : 0.875
+[2026-03-30 22:54:24,698][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:54:24,698][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 22:55:06,725][__main__][INFO] - Step 1025/5000, Training loss: 0.0017,  Regularization loss: 0.0018, Validation loss: 0.0036
+Output shape from conv layers 1024
+[2026-03-30 22:55:08,199][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:55:08,199][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:55:08,199][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 22:55:08,199][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:55:08,199][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 22:55:08,199][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:55:08,199][__main__][INFO] - position_val_classifier_gener : 0.9375
+[2026-03-30 22:55:08,199][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:55:08,199][__main__][INFO] - optimal_n_clusters            : 8
+[2026-03-30 22:55:49,758][__main__][INFO] - Step 1281/5000, Training loss: 0.0011,  Regularization loss: 0.0012, Validation loss: 0.0031
+Output shape from conv layers 1024
+[2026-03-30 22:55:51,378][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:55:51,378][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:55:51,378][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 22:55:51,378][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:55:51,378][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 22:55:51,378][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:55:51,379][__main__][INFO] - position_val_classifier_gener : 0.9375
+[2026-03-30 22:55:51,379][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:55:51,379][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 22:56:32,958][__main__][INFO] - Step 1537/5000, Training loss: 0.0008,  Regularization loss: 0.0009, Validation loss: 0.0028
+Output shape from conv layers 1024
+[2026-03-30 22:56:34,653][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:56:34,653][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:56:34,653][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 22:56:34,653][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:56:34,653][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 22:56:34,653][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:56:34,653][__main__][INFO] - position_val_classifier_gener : 0.875
+[2026-03-30 22:56:34,653][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:56:34,653][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 22:57:16,176][__main__][INFO] - Step 1793/5000, Training loss: 0.0006,  Regularization loss: 0.0006, Validation loss: 0.0023
+Output shape from conv layers 1024
+[2026-03-30 22:57:17,831][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:57:17,831][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:57:17,831][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 22:57:17,831][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:57:17,831][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 22:57:17,831][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:57:17,831][__main__][INFO] - position_val_classifier_gener : 0.9375
+[2026-03-30 22:57:17,831][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:57:17,832][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 22:57:59,836][__main__][INFO] - Step 2049/5000, Training loss: 0.0005,  Regularization loss: 0.0005, Validation loss: 0.0022
+Output shape from conv layers 1024
+[2026-03-30 22:58:01,576][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:58:01,576][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:58:01,576][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 22:58:01,576][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:58:01,576][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 22:58:01,576][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:58:01,576][__main__][INFO] - position_val_classifier_gener : 0.875
+[2026-03-30 22:58:01,576][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:58:01,576][__main__][INFO] - optimal_n_clusters            : 6
+[2026-03-30 22:58:43,716][__main__][INFO] - Step 2305/5000, Training loss: 0.0004,  Regularization loss: 0.0005, Validation loss: 0.0021
+Output shape from conv layers 1024
+[2026-03-30 22:58:45,220][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:58:45,221][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:58:45,221][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 22:58:45,221][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:58:45,221][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 22:58:45,221][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:58:45,221][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 22:58:45,221][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:58:45,221][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 22:59:27,281][__main__][INFO] - Step 2561/5000, Training loss: 0.0004,  Regularization loss: 0.0005, Validation loss: 0.0020
+Output shape from conv layers 1024
+[2026-03-30 22:59:28,901][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 22:59:28,901][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 22:59:28,901][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 22:59:28,901][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 22:59:28,901][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 22:59:28,902][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 22:59:28,902][__main__][INFO] - position_val_classifier_gener : 0.8125
+[2026-03-30 22:59:28,902][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 22:59:28,902][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:00:10,613][__main__][INFO] - Step 2817/5000, Training loss: 0.0004,  Regularization loss: 0.0004, Validation loss: 0.0019
+Output shape from conv layers 1024
+[2026-03-30 23:00:12,167][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:00:12,167][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:00:12,167][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:00:12,167][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:00:12,167][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:00:12,167][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:00:12,168][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:00:12,168][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:00:12,168][__main__][INFO] - optimal_n_clusters            : 8
+[2026-03-30 23:00:53,430][__main__][INFO] - Step 3073/5000, Training loss: 0.0003,  Regularization loss: 0.0004, Validation loss: 0.0020
+Output shape from conv layers 1024
+[2026-03-30 23:00:55,036][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:00:55,036][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:00:55,036][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:00:55,036][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:00:55,036][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:00:55,036][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:00:55,036][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:00:55,036][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:00:55,036][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:01:36,668][__main__][INFO] - Step 3329/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0020
+Output shape from conv layers 1024
+[2026-03-30 23:01:38,319][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:01:38,319][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:01:38,319][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:01:38,319][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:01:38,319][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:01:38,319][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:01:38,319][__main__][INFO] - position_val_classifier_gener : 0.875
+[2026-03-30 23:01:38,319][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:01:38,319][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:02:19,831][__main__][INFO] - Step 3585/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0022
+Output shape from conv layers 1024
+[2026-03-30 23:02:21,393][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:02:21,393][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:02:21,393][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:02:21,393][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:02:21,393][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:02:21,393][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:02:21,393][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:02:21,393][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:02:21,393][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:03:03,075][__main__][INFO] - Step 3841/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0021
+Output shape from conv layers 1024
+[2026-03-30 23:03:04,576][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:03:04,576][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:03:04,576][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:03:04,576][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:03:04,576][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:03:04,576][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:03:04,576][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:03:04,576][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:03:04,576][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:03:46,301][__main__][INFO] - Step 4097/5000, Training loss: 0.0002,  Regularization loss: 0.0003, Validation loss: 0.0020
+Output shape from conv layers 1024
+[2026-03-30 23:03:48,013][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:03:48,013][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:03:48,013][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:03:48,013][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:03:48,013][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:03:48,013][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:03:48,013][__main__][INFO] - position_val_classifier_gener : 0.875
+[2026-03-30 23:03:48,013][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:03:48,013][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:04:30,315][__main__][INFO] - Step 4353/5000, Training loss: 0.0002,  Regularization loss: 0.0003, Validation loss: 0.0022
+Output shape from conv layers 1024
+[2026-03-30 23:04:32,029][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:04:32,029][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:04:32,029][__main__][INFO] - primitive_val_classifier_gener: 0.75
+[2026-03-30 23:04:32,029][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:04:32,029][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:04:32,029][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:04:32,029][__main__][INFO] - position_val_classifier_gener : 0.9375
+[2026-03-30 23:04:32,029][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:04:32,029][__main__][INFO] - optimal_n_clusters            : 6
+[2026-03-30 23:05:13,909][__main__][INFO] - Step 4609/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0024
+Output shape from conv layers 1024
+[2026-03-30 23:05:15,572][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:05:15,573][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:05:15,573][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:05:15,573][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:05:15,573][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:05:15,573][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:05:15,573][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:05:15,573][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:05:15,573][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:05:57,246][__main__][INFO] - Step 4865/5000, Training loss: 0.0002,  Regularization loss: 0.0003, Validation loss: 0.0019
+Output shape from conv layers 1024
+[2026-03-30 23:05:58,881][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:05:58,882][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:05:58,882][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:05:58,882][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:05:58,882][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:05:58,882][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:05:58,882][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:05:58,882][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:05:58,882][__main__][INFO] - optimal_n_clusters            : 6
+[2026-03-30 23:06:21,053][__main__][INFO] - Step 5000/5000, Training loss: 0.0002,  Regularization loss: 0.0002, Validation loss: 0.0021
+Output shape from conv layers 1024
+[2026-03-30 23:06:22,616][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:06:22,617][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:06:22,617][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:06:22,617][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:06:22,617][__main__][INFO] - color_val_classifier_gener    : 1.0
+[2026-03-30 23:06:22,617][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:06:22,617][__main__][INFO] - position_val_classifier_gener : 0.8125
+[2026-03-30 23:06:22,617][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:06:22,617][__main__][INFO] - optimal_n_clusters            : 6
+Output shape from conv layers 1024
+Optimal clusters: 6, silhouette scores: [0.21119 0.22366 0.27582 0.28886 0.31    0.28871 0.30671 0.28462 0.24533 0.23237 0.23457 0.2478  0.22843 0.23352 0.23855 0.24016 0.24508 0.23886 0.23383 0.22068 0.22443 0.22435 0.21802]
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Cluster 0: orig=0.0007  lesioned=0.0022
+Output shape from conv layers 1024
+Cluster 1: orig=0.0007  lesioned=0.0022
+Output shape from conv layers 1024
+Cluster 2: orig=0.0007  lesioned=0.0029
+Output shape from conv layers 1024
+Cluster 3: orig=0.0007  lesioned=0.0019
+Output shape from conv layers 1024
+Cluster 4: orig=0.0007  lesioned=0.0012
+Output shape from conv layers 1024
+Cluster 5: orig=0.0007  lesioned=0.0012
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed0
+figures_4999/neuron_clusters/26-03-30-23-06-33.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed0
+figures_4999/neuron_clusters_lesion/26-03-30-23-06-34.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed0
+figures_4999/neuron_clusters_lesion_0_[1, 0, 0]/26-03-30-23-06-35.png
+Output shape from conv layers 1024
+Group 0 has [  9  20  22  44  61  66  67  71  83  89 102 115 121 124 135 147 152 163 166 168 209 220 226 229 234 236 250 266 273 301 304 314 317 322 327 333 342 369 376 380 400 406 419 427 428 450 473 481 483
+ 488 508] neurons
+Group 1 has [  5  16  26  38  68  73  81  96 105 113 136 154 158 161 170 178 197 198 203 214 240 245 249 253 254 259 268 269 272 277 287 289 291 294 297 307 315 318 320 321 345 358 372 377 386 389 398 401 403
+ 446 447 465 471 484 486 499 505] neurons
+Group 2 has [  0   4  10  21  25  27  34  48  49  50  52  53  57  58  59  62  65  77  78  84  86  93  97  98 108 109 111 117 120 125 129 130 133 138 142 148 156 157 162 176 182 189 193 196 200 207 208 212 216
+ 218 223 225 231 235 237 242 243 244 252 265 270 285 286 288 290 293 298 302 303 306 308 312 319 326 331 332 340 343 353 354 355 361 362 364 366 368 375 378 384 385 392 397 407 408 414 418 420 422
+ 423 426 429 431 432 439 442 448 453 455 468 478 487 489 493 498 500 503 506] neurons
+Group 3 has [  1   2  14  15  17  18  28  31  32  40  41  42  43  47  51  54  63  76  79  82  85  90 100 110 112 114 118 126 127 128 140 143 144 145 150 153 169 172 180 188 191 194 201 202 215 224 228 230 257
+ 261 263 267 271 274 276 283 292 296 305 316 323 328 335 336 337 341 347 350 356 359 360 363 391 394 405 410 413 424 425 435 436 440 441 452 454 470 479 480 482 490 495 496 497 504] neurons
+Group 4 has [  6   7   8  29  39  45  56  75  80  87  95 134 159 173 186 187 204 206 221 232 258 262 281 282 299 313 330 379 381 382 402 459 463 476 501 510] neurons
+Group 5 has [ 23  24  30  55  64  72  92  94 106 116 123 139 141 146 155 164 174 179 181 183 184 190 195 205 210 211 227 239 247 251 278 300 310 324 334 338 365 371 409 411 433 434 438 443 445 456 458 461 462
+ 466 467 474 507] neurons
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed0
+figures_4999/context_weights_heatmaps/26-03-30-23-06-38.png
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed0
+figures_4999/mean_cluster_activity_[[1, 0, 0], [0, 0, 1]]/26-03-30-23-06-42.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed0
+figures_4999/global_cluster_correlation/26-03-30-23-06-42.png
+[2026-03-30 23:06:43,797][__main__][INFO] - Saved model at step 4999.
+[2026-03-30 23:06:43,922][__main__][INFO] - Training completed after 5000 steps.
+/home/ghb24/paper_git/er/comp_predictive_learning/scripts/train_rnn.py:54: UserWarning: 
+The version_base parameter is not specified.
+Please specify a compatability version level, or None.
+Will assume defaults for version 1.1
+  @hydra.main(config_path="configs",config_name="train_rnn")
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/hydra/_internal/defaults_list.py:251: UserWarning: In 'train_rnn': Defaults list is missing `_self_`. See https://hydra.cc/docs/1.2/upgrades/1.0_to_1.1/default_composition_order for more information
+  warnings.warn(msg, UserWarning)
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/hydra/_internal/hydra.py:119: UserWarning: Future Hydra versions will no longer change working directory at job runtime by default.
+See https://hydra.cc/docs/1.2/upgrades/1.1_to_1.2/changes_to_job_working_dir/ for more information.
+  ret = run_job(
+Found a good split after 1 tries.
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/torch/utils/data/sampler.py:76: UserWarning: `data_source` argument is not used and will be removed in 2.2.0.You may still have custom implementation that utilizes it.
+  warnings.warn(
+Output shape from conv layers 1024
+[2026-03-30 23:06:49,611][__main__][INFO] - Device: cuda
+model:
+  _target_: compo_predictive_learning.models.rnn_ae.RNNAE
+  encoder_cfg: null
+  decoder_cfg: null
+  rnn_cfg: null
+  type: pred
+  name: ae_${.type}
+dataset:
+  num_pretrain_drawings_per_context: 512
+  num_val_drawings_per_context: 128
+  num_test_drawings_per_context: 128
+  colorize_white: false
+  canvas_size: 64
+  unit_length: 16
+  premake_videos: false
+  num_primitives: 4
+  scales:
+  - 1
+  colors:
+  - white
+  - red
+  - green
+  - blue
+  symbol_timestep: 0
+  sequence_length: 6
+  noisy_in_quadrant_locations: false
+  contexts:
+  - next_primitive_offset
+  - next_color_offset
+  - next_position_offset
+  - next_scale_offset
+  next_primitive_offset:
+  - 0
+  - 1
+  next_scale_offset:
+  - 0
+  next_color_offset:
+  - 0
+  - 1
+  next_position_offset:
+  - 0
+  - 1
+  name: sketch_${.sequence_length}/${.colors}/${.scales}/${.colorize_white}/${.scales}_${.num_pretrain_drawings_per_context}_${.num_val_drawings_per_context}_${.num_test_drawings_per_context}_${.canvas_size}_${.unit_length}/${.contexts}/${.next_primitive_offset}/${.next_scale_offset}/${.next_position_offset}/${.next_color_offset}
+rnn:
+  _target_: compo_predictive_learning.models.rnn.JitLeakyRNNLayer
+  input_dim: 512
+  hidden_dim: 512
+  noise: 0.05
+  rnn_init: eye
+  activation: relu
+  leak_alpha: 1
+  mlp_dynamics: false
+  name: rnn_${.hidden_dim}_${.activation}_${.leak_alpha}_${.mlp_dynamics}_${.rnn_init}_${.noise}
+encoder:
+  _target_: compo_predictive_learning.models.encoders.ConvEncoder
+  input_dim:
+  - 3
+  - 64
+  - 64
+  hidden_dims:
+  - 16
+  - 16
+  - 16
+  output_dim: 512
+  activation: relu
+  norm_layer: none
+  max_pooling: false
+  name: conv_${.hidden_dims}_${.activation}_${.norm_layer}_${.max_pooling}_${.output_dim}
+decoder:
+  _target_: compo_predictive_learning.models.decoders.ConvDecoder
+  input_dim: 512
+  hidden_dims:
+  - 16
+  - 16
+  - 16
+  output_dim:
+  - 3
+  - 64
+  - 64
+  activation: relu
+  norm_layer: none
+  name: conv_${.hidden_dims}_${.activation}_${.norm_layer}
+seed: 1
+save_models: false
+one_context_per_batch: true
+no_redo: true
+compute_clustering: true
+compute_metrics: true
+use_whole_drawing: false
+one_hot_context: false
+support_type: full
+subsample_contexts_ratio: 0.8
+support_connectivity: 1
+make_plots: true
+train_loop:
+  num_steps: 5000
+  eval_every: 256
+  compute_metrics_every: 256
+  make_plots_every: -1
+  pretrain_lr: 0.001
+  pretrain_decay: 0.001
+  pretrain_act_decay: 0.01
+  pretrain_act_l1: 0
+  pretrain_weight_l1: 0
+  batch_size: 128
+  save_model_every: 100000000
+
+RNNAE(
+  (encoder): ConvEncoder(
+    (conv_layers): Sequential(
+      (0): Conv2d(3, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (1): ReLU(inplace=True)
+      (2): Conv2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (3): ReLU(inplace=True)
+      (4): Conv2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (5): ReLU(inplace=True)
+    )
+    (fc): Linear(in_features=1024, out_features=512, bias=True)
+  )
+  (rnn): JitLeakyRNNLayer(
+    (input_layer): RecursiveScriptModule(original_name=Linear)
+    (weight_hh): RecursiveScriptModule(original_name=Linear)
+    (activation): RecursiveScriptModule(original_name=ReLU)
+  )
+  (decoder): ConvDecoder(
+    (fc): Linear(in_features=512, out_features=1024, bias=True)
+    (conv_layers): Sequential(
+      (0): ConvTranspose2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1), bias=False)
+      (1): ReLU(inplace=True)
+      (2): ConvTranspose2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1), bias=False)
+      (3): ReLU(inplace=True)
+    )
+    (output_layer): ConvTranspose2d(16, 3, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1))
+  )
+  (loss_fn): MSELoss()
+  (activation): Identity()
+)
+[2026-03-30 23:06:49,617][__main__][INFO] - -----------------
+[2026-03-30 23:06:49,617][__main__][INFO] - Pretraining
+[2026-03-30 23:06:49,617][__main__][INFO] - -----------------
+[2026-03-30 23:06:50,634][__main__][INFO] - Step 1/5000, Training loss: 0.0269,  Regularization loss: 0.0271, Validation loss: 0.0258
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/sklearn/svm/_base.py:1250: ConvergenceWarning: Liblinear failed to converge, increase the number of iterations.
+  warnings.warn(
+Output shape from conv layers 1024
+Not enough samples for clustering.
+[2026-03-30 23:06:52,340][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:06:52,340][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:06:52,340][__main__][INFO] - primitive_val_classifier_gener: 0.3125
+[2026-03-30 23:06:52,340][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:06:52,340][__main__][INFO] - color_val_classifier_gener    : 0.4375
+[2026-03-30 23:06:52,340][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:06:52,340][__main__][INFO] - position_val_classifier_gener : 0.375
+[2026-03-30 23:06:52,340][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:06:52,340][__main__][INFO] - optimal_n_clusters            : 1
+[2026-03-30 23:07:34,413][__main__][INFO] - Step 257/5000, Training loss: 0.0084,  Regularization loss: 0.0085, Validation loss: 0.0060
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/sklearn/svm/_base.py:1250: ConvergenceWarning: Liblinear failed to converge, increase the number of iterations.
+  warnings.warn(
+Output shape from conv layers 1024
+[2026-03-30 23:07:36,045][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:07:36,045][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:07:36,045][__main__][INFO] - primitive_val_classifier_gener: 0.3125
+[2026-03-30 23:07:36,045][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:07:36,045][__main__][INFO] - color_val_classifier_gener    : 0.25
+[2026-03-30 23:07:36,045][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:07:36,045][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:07:36,045][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:07:36,045][__main__][INFO] - optimal_n_clusters            : 4
+[2026-03-30 23:08:17,301][__main__][INFO] - Step 513/5000, Training loss: 0.0042,  Regularization loss: 0.0043, Validation loss: 0.0033
+Output shape from conv layers 1024
+[2026-03-30 23:08:18,797][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:08:18,797][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:08:18,798][__main__][INFO] - primitive_val_classifier_gener: 0.8125
+[2026-03-30 23:08:18,798][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:08:18,798][__main__][INFO] - color_val_classifier_gener    : 0.3125
+[2026-03-30 23:08:18,798][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:08:18,798][__main__][INFO] - position_val_classifier_gener : 0.8125
+[2026-03-30 23:08:18,798][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:08:18,798][__main__][INFO] - optimal_n_clusters            : 5
+[2026-03-30 23:09:00,900][__main__][INFO] - Step 769/5000, Training loss: 0.0024,  Regularization loss: 0.0025, Validation loss: 0.0026
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/sklearn/svm/_base.py:1250: ConvergenceWarning: Liblinear failed to converge, increase the number of iterations.
+  warnings.warn(
+Output shape from conv layers 1024
+[2026-03-30 23:09:02,799][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:09:02,799][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:09:02,799][__main__][INFO] - primitive_val_classifier_gener: 0.8125
+[2026-03-30 23:09:02,799][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:09:02,799][__main__][INFO] - color_val_classifier_gener    : 0.5
+[2026-03-30 23:09:02,799][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:09:02,799][__main__][INFO] - position_val_classifier_gener : 0.5
+[2026-03-30 23:09:02,799][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:09:02,799][__main__][INFO] - optimal_n_clusters            : 4
+[2026-03-30 23:09:39,862][__main__][INFO] - Step 1025/5000, Training loss: 0.0016,  Regularization loss: 0.0017, Validation loss: 0.0021
+Output shape from conv layers 1024
+[2026-03-30 23:09:41,348][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:09:41,349][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:09:41,349][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:09:41,349][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:09:41,349][__main__][INFO] - color_val_classifier_gener    : 0.5625
+[2026-03-30 23:09:41,349][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:09:41,349][__main__][INFO] - position_val_classifier_gener : 0.5625
+[2026-03-30 23:09:41,349][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:09:41,349][__main__][INFO] - optimal_n_clusters            : 9
+[2026-03-30 23:10:22,638][__main__][INFO] - Step 1281/5000, Training loss: 0.0012,  Regularization loss: 0.0012, Validation loss: 0.0020
+Output shape from conv layers 1024
+[2026-03-30 23:10:24,208][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:10:24,208][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:10:24,208][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:10:24,208][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:10:24,208][__main__][INFO] - color_val_classifier_gener    : 0.4375
+[2026-03-30 23:10:24,208][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:10:24,208][__main__][INFO] - position_val_classifier_gener : 0.5625
+[2026-03-30 23:10:24,208][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:10:24,208][__main__][INFO] - optimal_n_clusters            : 6
+[2026-03-30 23:11:06,146][__main__][INFO] - Step 1537/5000, Training loss: 0.0008,  Regularization loss: 0.0009, Validation loss: 0.0017
+Output shape from conv layers 1024
+[2026-03-30 23:11:07,636][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:11:07,637][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:11:07,637][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:11:07,637][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:11:07,637][__main__][INFO] - color_val_classifier_gener    : 0.5
+[2026-03-30 23:11:07,637][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:11:07,637][__main__][INFO] - position_val_classifier_gener : 0.4375
+[2026-03-30 23:11:07,637][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:11:07,637][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:11:44,412][__main__][INFO] - Step 1793/5000, Training loss: 0.0007,  Regularization loss: 0.0008, Validation loss: 0.0015
+Output shape from conv layers 1024
+[2026-03-30 23:11:45,777][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:11:45,777][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:11:45,777][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:11:45,777][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:11:45,777][__main__][INFO] - color_val_classifier_gener    : 0.375
+[2026-03-30 23:11:45,777][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:11:45,778][__main__][INFO] - position_val_classifier_gener : 0.25
+[2026-03-30 23:11:45,778][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:11:45,778][__main__][INFO] - optimal_n_clusters            : 8
+[2026-03-30 23:12:27,561][__main__][INFO] - Step 2049/5000, Training loss: 0.0005,  Regularization loss: 0.0005, Validation loss: 0.0013
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/sklearn/svm/_base.py:1250: ConvergenceWarning: Liblinear failed to converge, increase the number of iterations.
+  warnings.warn(
+Output shape from conv layers 1024
+[2026-03-30 23:12:29,221][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:12:29,221][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:12:29,221][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:12:29,221][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:12:29,221][__main__][INFO] - color_val_classifier_gener    : 0.625
+[2026-03-30 23:12:29,221][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:12:29,221][__main__][INFO] - position_val_classifier_gener : 0.625
+[2026-03-30 23:12:29,221][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:12:29,221][__main__][INFO] - optimal_n_clusters            : 8
+[2026-03-30 23:13:11,237][__main__][INFO] - Step 2305/5000, Training loss: 0.0004,  Regularization loss: 0.0004, Validation loss: 0.0013
+Output shape from conv layers 1024
+[2026-03-30 23:13:12,806][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:13:12,806][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:13:12,807][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:13:12,807][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:13:12,807][__main__][INFO] - color_val_classifier_gener    : 0.625
+[2026-03-30 23:13:12,807][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:13:12,807][__main__][INFO] - position_val_classifier_gener : 0.75
+[2026-03-30 23:13:12,807][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:13:12,807][__main__][INFO] - optimal_n_clusters            : 9
+[2026-03-30 23:13:50,251][__main__][INFO] - Step 2561/5000, Training loss: 0.0003,  Regularization loss: 0.0004, Validation loss: 0.0011
+Output shape from conv layers 1024
+[2026-03-30 23:13:51,712][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:13:51,713][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:13:51,713][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:13:51,713][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:13:51,713][__main__][INFO] - color_val_classifier_gener    : 0.4375
+[2026-03-30 23:13:51,713][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:13:51,713][__main__][INFO] - position_val_classifier_gener : 0.5625
+[2026-03-30 23:13:51,713][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:13:51,713][__main__][INFO] - optimal_n_clusters            : 9
+[2026-03-30 23:14:33,667][__main__][INFO] - Step 2817/5000, Training loss: 0.0003,  Regularization loss: 0.0004, Validation loss: 0.0011
+Output shape from conv layers 1024
+[2026-03-30 23:14:35,465][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:14:35,466][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:14:35,466][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:14:35,466][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:14:35,466][__main__][INFO] - color_val_classifier_gener    : 0.5
+[2026-03-30 23:14:35,466][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:14:35,466][__main__][INFO] - position_val_classifier_gener : 0.4375
+[2026-03-30 23:14:35,466][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:14:35,466][__main__][INFO] - optimal_n_clusters            : 5
+[2026-03-30 23:15:17,257][__main__][INFO] - Step 3073/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0011
+Output shape from conv layers 1024
+[2026-03-30 23:15:18,892][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:15:18,892][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:15:18,892][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:15:18,892][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:15:18,892][__main__][INFO] - color_val_classifier_gener    : 0.4375
+[2026-03-30 23:15:18,892][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:15:18,892][__main__][INFO] - position_val_classifier_gener : 0.5
+[2026-03-30 23:15:18,892][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:15:18,892][__main__][INFO] - optimal_n_clusters            : 10
+[2026-03-30 23:15:55,977][__main__][INFO] - Step 3329/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0010
+Output shape from conv layers 1024
+[2026-03-30 23:15:57,382][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:15:57,382][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:15:57,382][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:15:57,382][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:15:57,382][__main__][INFO] - color_val_classifier_gener    : 0.4375
+[2026-03-30 23:15:57,382][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:15:57,382][__main__][INFO] - position_val_classifier_gener : 0.6875
+[2026-03-30 23:15:57,383][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:15:57,383][__main__][INFO] - optimal_n_clusters            : 10
+[2026-03-30 23:16:39,021][__main__][INFO] - Step 3585/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0010
+Output shape from conv layers 1024
+[2026-03-30 23:16:40,541][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:16:40,541][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:16:40,541][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:16:40,541][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:16:40,541][__main__][INFO] - color_val_classifier_gener    : 0.5
+[2026-03-30 23:16:40,541][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:16:40,541][__main__][INFO] - position_val_classifier_gener : 0.4375
+[2026-03-30 23:16:40,541][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:16:40,541][__main__][INFO] - optimal_n_clusters            : 9
+[2026-03-30 23:17:22,201][__main__][INFO] - Step 3841/5000, Training loss: 0.0002,  Regularization loss: 0.0003, Validation loss: 0.0009
+Output shape from conv layers 1024
+[2026-03-30 23:17:23,796][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:17:23,796][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:17:23,796][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:17:23,796][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:17:23,796][__main__][INFO] - color_val_classifier_gener    : 0.625
+[2026-03-30 23:17:23,796][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:17:23,796][__main__][INFO] - position_val_classifier_gener : 0.5
+[2026-03-30 23:17:23,796][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:17:23,797][__main__][INFO] - optimal_n_clusters            : 9
+[2026-03-30 23:18:00,487][__main__][INFO] - Step 4097/5000, Training loss: 0.0002,  Regularization loss: 0.0003, Validation loss: 0.0009
+Output shape from conv layers 1024
+[2026-03-30 23:18:01,885][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:18:01,885][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:18:01,885][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:18:01,885][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:18:01,885][__main__][INFO] - color_val_classifier_gener    : 0.5625
+[2026-03-30 23:18:01,885][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:18:01,885][__main__][INFO] - position_val_classifier_gener : 0.625
+[2026-03-30 23:18:01,885][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:18:01,885][__main__][INFO] - optimal_n_clusters            : 12
+[2026-03-30 23:18:43,728][__main__][INFO] - Step 4353/5000, Training loss: 0.0002,  Regularization loss: 0.0002, Validation loss: 0.0009
+Output shape from conv layers 1024
+[2026-03-30 23:18:45,378][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:18:45,378][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:18:45,378][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:18:45,378][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:18:45,378][__main__][INFO] - color_val_classifier_gener    : 0.3125
+[2026-03-30 23:18:45,378][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:18:45,378][__main__][INFO] - position_val_classifier_gener : 0.375
+[2026-03-30 23:18:45,378][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:18:45,378][__main__][INFO] - optimal_n_clusters            : 12
+[2026-03-30 23:19:27,287][__main__][INFO] - Step 4609/5000, Training loss: 0.0002,  Regularization loss: 0.0003, Validation loss: 0.0009
+Output shape from conv layers 1024
+[2026-03-30 23:19:28,870][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:19:28,870][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:19:28,870][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:19:28,870][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:19:28,870][__main__][INFO] - color_val_classifier_gener    : 0.25
+[2026-03-30 23:19:28,870][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:19:28,870][__main__][INFO] - position_val_classifier_gener : 0.9375
+[2026-03-30 23:19:28,870][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:19:28,870][__main__][INFO] - optimal_n_clusters            : 11
+[2026-03-30 23:20:06,153][__main__][INFO] - Step 4865/5000, Training loss: 0.0002,  Regularization loss: 0.0002, Validation loss: 0.0008
+Output shape from conv layers 1024
+[2026-03-30 23:20:07,710][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:20:07,711][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:20:07,711][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:20:07,711][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:20:07,711][__main__][INFO] - color_val_classifier_gener    : 0.25
+[2026-03-30 23:20:07,711][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:20:07,711][__main__][INFO] - position_val_classifier_gener : 0.5
+[2026-03-30 23:20:07,711][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:20:07,711][__main__][INFO] - optimal_n_clusters            : 11
+[2026-03-30 23:20:29,789][__main__][INFO] - Step 5000/5000, Training loss: 0.0002,  Regularization loss: 0.0002, Validation loss: 0.0009
+Output shape from conv layers 1024
+[2026-03-30 23:20:31,411][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:20:31,411][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:20:31,411][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:20:31,411][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:20:31,411][__main__][INFO] - color_val_classifier_gener    : 0.375
+[2026-03-30 23:20:31,411][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:20:31,411][__main__][INFO] - position_val_classifier_gener : 0.75
+[2026-03-30 23:20:31,411][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:20:31,411][__main__][INFO] - optimal_n_clusters            : 11
+Output shape from conv layers 1024
+Optimal clusters: 11, silhouette scores: [0.19768 0.20306 0.21442 0.23845 0.23133 0.22387 0.23037 0.23594 0.22892 0.23929 0.21154 0.20477 0.22946 0.22968 0.23529 0.23012 0.23161 0.22543 0.2269  0.2165  0.21489 0.20914 0.21009]
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Cluster 0: orig=0.0004  lesioned=0.0005
+Output shape from conv layers 1024
+Cluster 1: orig=0.0004  lesioned=0.0005
+Output shape from conv layers 1024
+Cluster 2: orig=0.0004  lesioned=0.0004
+Output shape from conv layers 1024
+Cluster 3: orig=0.0004  lesioned=0.0005
+Output shape from conv layers 1024
+Cluster 4: orig=0.0004  lesioned=0.0007
+Output shape from conv layers 1024
+Cluster 5: orig=0.0004  lesioned=0.0009
+Output shape from conv layers 1024
+Cluster 6: orig=0.0004  lesioned=0.0011
+Output shape from conv layers 1024
+Cluster 7: orig=0.0004  lesioned=0.0012
+Output shape from conv layers 1024
+Cluster 8: orig=0.0004  lesioned=0.0007
+Output shape from conv layers 1024
+Cluster 9: orig=0.0004  lesioned=0.0011
+Output shape from conv layers 1024
+Cluster 10: orig=0.0004  lesioned=0.0009
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed1
+figures_4999/neuron_clusters/26-03-30-23-20-48.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed1
+figures_4999/neuron_clusters_lesion/26-03-30-23-20-49.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed1
+figures_4999/neuron_clusters_lesion_0_[0, 1, 1]/26-03-30-23-20-50.png
+Output shape from conv layers 1024
+Group 0 has [ 11  26  34  50  75  76  83  96  98 103 108 110 121 143 150 170 172 176 177 178 222 228 234 257 267 272 281 282 290 309 311 340 347 362 364 366 382 387 396 414 437 448 451 454 464 466 483 486 488
+ 491 511] neurons
+Group 1 has [ 10  29  33 139 209 253 255 256 268 284 318 325 331 338 349 372 378 389 431 463 478 479 493 497] neurons
+Group 2 has [ 27  44  48  61  69 112 147 168 190 219 224 254 260 273 303 315 327 332 336 341 354 438 443 444 445 498] neurons
+Group 3 has [ 32  38  40  53 128 165 169 207 221 239 243 271 289 294 322 333 374 384 393 442 447 457 473 508] neurons
+Group 4 has [  6  20  31  36  39  45  47  60  82  97 111 125 156 160 187 204 213 220 237 240 250 262 269 285 296 297 299 301 306 323 324 342 346 357 368 369 377 379 380 385 390 400 418 425 427 449 458 480 481
+ 506 509] neurons
+Group 5 has [  4  12  18  24  25  59  64 100 106 113 115 151 199 206 225 270 276 317 359 406 421 433 434 435 455 465 475 490] neurons
+Group 6 has [  1   3   5  19  42  43  52  57  65  72  73  78  85 107 119 131 138 157 159 175 179 189 193 198 200 229 242 277 279 304 314 316 330 348 355 361 373 375 383 409 453 456 477 494 495] neurons
+Group 7 has [ 13  16  37  49  51  54  71  84  88  90 109 194 202 217 235 280 307 310 313 334 350 351 352 356 376 397 402 408 470 474 476 500 501 510] neurons
+Group 8 has [  8  41  91 105 120 122 134 136 145 149 154 186 188 192 196 208 212 223 236 266 328 337 345 358 363 386 403 405 419 423 462 467 492 504 507] neurons
+Group 9 has [ 17  22  28  55  56  66  68  80  86  92  95 114 117 132 135 141 142 146 148 153 164 166 171 181 210 211 214 216 218 231 245 248 252 261 263 274 278 287 298 300 343 353 360 371 381 394 399 401 404
+ 410 411 412 415 420 422 424 426 428 441 450 452 485 502 503] neurons
+Group 10 has [ 21  77  93 101 116 118 130 144 182 191 230 233 246 283 286 292 295 305 344 391 398 407 413 417 436 439 440 461 468] neurons
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed1
+figures_4999/context_weights_heatmaps/26-03-30-23-20-53.png
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed1
+figures_4999/mean_cluster_activity_[[0, 1, 1], [1, 1, 0]]/26-03-30-23-20-57.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed1
+figures_4999/global_cluster_correlation/26-03-30-23-20-58.png
+[2026-03-30 23:20:59,306][__main__][INFO] - Saved model at step 4999.
+[2026-03-30 23:20:59,431][__main__][INFO] - Training completed after 5000 steps.
+/home/ghb24/paper_git/er/comp_predictive_learning/scripts/train_rnn.py:54: UserWarning: 
+The version_base parameter is not specified.
+Please specify a compatability version level, or None.
+Will assume defaults for version 1.1
+  @hydra.main(config_path="configs",config_name="train_rnn")
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/hydra/_internal/defaults_list.py:251: UserWarning: In 'train_rnn': Defaults list is missing `_self_`. See https://hydra.cc/docs/1.2/upgrades/1.0_to_1.1/default_composition_order for more information
+  warnings.warn(msg, UserWarning)
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/hydra/_internal/hydra.py:119: UserWarning: Future Hydra versions will no longer change working directory at job runtime by default.
+See https://hydra.cc/docs/1.2/upgrades/1.1_to_1.2/changes_to_job_working_dir/ for more information.
+  ret = run_job(
+Found a good split after 1 tries.
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/torch/utils/data/sampler.py:76: UserWarning: `data_source` argument is not used and will be removed in 2.2.0.You may still have custom implementation that utilizes it.
+  warnings.warn(
+Output shape from conv layers 1024
+[2026-03-30 23:21:05,300][__main__][INFO] - Device: cuda
+model:
+  _target_: compo_predictive_learning.models.rnn_ae.RNNAE
+  encoder_cfg: null
+  decoder_cfg: null
+  rnn_cfg: null
+  type: pred
+  name: ae_${.type}
+dataset:
+  num_pretrain_drawings_per_context: 512
+  num_val_drawings_per_context: 128
+  num_test_drawings_per_context: 128
+  colorize_white: false
+  canvas_size: 64
+  unit_length: 16
+  premake_videos: false
+  num_primitives: 4
+  scales:
+  - 1
+  colors:
+  - white
+  - red
+  - green
+  - blue
+  symbol_timestep: 0
+  sequence_length: 6
+  noisy_in_quadrant_locations: false
+  contexts:
+  - next_primitive_offset
+  - next_color_offset
+  - next_position_offset
+  - next_scale_offset
+  next_primitive_offset:
+  - 0
+  - 1
+  next_scale_offset:
+  - 0
+  next_color_offset:
+  - 0
+  - 1
+  next_position_offset:
+  - 0
+  - 1
+  name: sketch_${.sequence_length}/${.colors}/${.scales}/${.colorize_white}/${.scales}_${.num_pretrain_drawings_per_context}_${.num_val_drawings_per_context}_${.num_test_drawings_per_context}_${.canvas_size}_${.unit_length}/${.contexts}/${.next_primitive_offset}/${.next_scale_offset}/${.next_position_offset}/${.next_color_offset}
+rnn:
+  _target_: compo_predictive_learning.models.rnn.JitLeakyRNNLayer
+  input_dim: 512
+  hidden_dim: 512
+  noise: 0.05
+  rnn_init: eye
+  activation: relu
+  leak_alpha: 1
+  mlp_dynamics: false
+  name: rnn_${.hidden_dim}_${.activation}_${.leak_alpha}_${.mlp_dynamics}_${.rnn_init}_${.noise}
+encoder:
+  _target_: compo_predictive_learning.models.encoders.ConvEncoder
+  input_dim:
+  - 3
+  - 64
+  - 64
+  hidden_dims:
+  - 16
+  - 16
+  - 16
+  output_dim: 512
+  activation: relu
+  norm_layer: none
+  max_pooling: false
+  name: conv_${.hidden_dims}_${.activation}_${.norm_layer}_${.max_pooling}_${.output_dim}
+decoder:
+  _target_: compo_predictive_learning.models.decoders.ConvDecoder
+  input_dim: 512
+  hidden_dims:
+  - 16
+  - 16
+  - 16
+  output_dim:
+  - 3
+  - 64
+  - 64
+  activation: relu
+  norm_layer: none
+  name: conv_${.hidden_dims}_${.activation}_${.norm_layer}
+seed: 2
+save_models: false
+one_context_per_batch: true
+no_redo: true
+compute_clustering: true
+compute_metrics: true
+use_whole_drawing: false
+one_hot_context: false
+support_type: full
+subsample_contexts_ratio: 0.8
+support_connectivity: 1
+make_plots: true
+train_loop:
+  num_steps: 5000
+  eval_every: 256
+  compute_metrics_every: 256
+  make_plots_every: -1
+  pretrain_lr: 0.001
+  pretrain_decay: 0.001
+  pretrain_act_decay: 0.01
+  pretrain_act_l1: 0
+  pretrain_weight_l1: 0
+  batch_size: 128
+  save_model_every: 100000000
+
+RNNAE(
+  (encoder): ConvEncoder(
+    (conv_layers): Sequential(
+      (0): Conv2d(3, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (1): ReLU(inplace=True)
+      (2): Conv2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (3): ReLU(inplace=True)
+      (4): Conv2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+      (5): ReLU(inplace=True)
+    )
+    (fc): Linear(in_features=1024, out_features=512, bias=True)
+  )
+  (rnn): JitLeakyRNNLayer(
+    (input_layer): RecursiveScriptModule(original_name=Linear)
+    (weight_hh): RecursiveScriptModule(original_name=Linear)
+    (activation): RecursiveScriptModule(original_name=ReLU)
+  )
+  (decoder): ConvDecoder(
+    (fc): Linear(in_features=512, out_features=1024, bias=True)
+    (conv_layers): Sequential(
+      (0): ConvTranspose2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1), bias=False)
+      (1): ReLU(inplace=True)
+      (2): ConvTranspose2d(16, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1), bias=False)
+      (3): ReLU(inplace=True)
+    )
+    (output_layer): ConvTranspose2d(16, 3, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), output_padding=(1, 1))
+  )
+  (loss_fn): MSELoss()
+  (activation): Identity()
+)
+[2026-03-30 23:21:05,306][__main__][INFO] - -----------------
+[2026-03-30 23:21:05,306][__main__][INFO] - Pretraining
+[2026-03-30 23:21:05,306][__main__][INFO] - -----------------
+[2026-03-30 23:21:06,410][__main__][INFO] - Step 1/5000, Training loss: 0.0325,  Regularization loss: 0.0326, Validation loss: 0.0324
+Output shape from conv layers 1024
+Not enough samples for clustering.
+[2026-03-30 23:21:08,044][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:21:08,044][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:21:08,044][__main__][INFO] - primitive_val_classifier_gener: 0.1875
+[2026-03-30 23:21:08,044][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:21:08,044][__main__][INFO] - color_val_classifier_gener    : 0.25
+[2026-03-30 23:21:08,044][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:21:08,045][__main__][INFO] - position_val_classifier_gener : 0.5
+[2026-03-30 23:21:08,045][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:21:08,045][__main__][INFO] - optimal_n_clusters            : 1
+[2026-03-30 23:21:49,690][__main__][INFO] - Step 257/5000, Training loss: 0.0090,  Regularization loss: 0.0091, Validation loss: 0.0078
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/sklearn/svm/_base.py:1250: ConvergenceWarning: Liblinear failed to converge, increase the number of iterations.
+  warnings.warn(
+Output shape from conv layers 1024
+[2026-03-30 23:21:51,156][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:21:51,156][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:21:51,156][__main__][INFO] - primitive_val_classifier_gener: 0.3125
+[2026-03-30 23:21:51,156][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:21:51,156][__main__][INFO] - color_val_classifier_gener    : 0.5625
+[2026-03-30 23:21:51,156][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:21:51,156][__main__][INFO] - position_val_classifier_gener : 0.375
+[2026-03-30 23:21:51,156][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:21:51,156][__main__][INFO] - optimal_n_clusters            : 2
+[2026-03-30 23:22:32,656][__main__][INFO] - Step 513/5000, Training loss: 0.0054,  Regularization loss: 0.0055, Validation loss: 0.0044
+/home/ghb24/miniconda3/envs/pre/lib/python3.10/site-packages/sklearn/svm/_base.py:1250: ConvergenceWarning: Liblinear failed to converge, increase the number of iterations.
+  warnings.warn(
+Output shape from conv layers 1024
+[2026-03-30 23:22:34,423][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:22:34,423][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:22:34,423][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:22:34,423][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:22:34,423][__main__][INFO] - color_val_classifier_gener    : 0.4375
+[2026-03-30 23:22:34,423][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:22:34,423][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:22:34,423][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:22:34,423][__main__][INFO] - optimal_n_clusters            : 2
+[2026-03-30 23:23:16,249][__main__][INFO] - Step 769/5000, Training loss: 0.0027,  Regularization loss: 0.0028, Validation loss: 0.0029
+Output shape from conv layers 1024
+[2026-03-30 23:23:17,762][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:23:17,762][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:23:17,762][__main__][INFO] - primitive_val_classifier_gener: 0.8125
+[2026-03-30 23:23:17,762][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:23:17,762][__main__][INFO] - color_val_classifier_gener    : 0.5
+[2026-03-30 23:23:17,763][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:23:17,763][__main__][INFO] - position_val_classifier_gener : 0.875
+[2026-03-30 23:23:17,763][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:23:17,763][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:23:55,167][__main__][INFO] - Step 1025/5000, Training loss: 0.0019,  Regularization loss: 0.0020, Validation loss: 0.0021
+Output shape from conv layers 1024
+[2026-03-30 23:23:56,586][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:23:56,586][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:23:56,586][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:23:56,587][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:23:56,587][__main__][INFO] - color_val_classifier_gener    : 0.6875
+[2026-03-30 23:23:56,587][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:23:56,587][__main__][INFO] - position_val_classifier_gener : 0.8125
+[2026-03-30 23:23:56,587][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:23:56,587][__main__][INFO] - optimal_n_clusters            : 5
+[2026-03-30 23:24:38,478][__main__][INFO] - Step 1281/5000, Training loss: 0.0013,  Regularization loss: 0.0014, Validation loss: 0.0016
+Output shape from conv layers 1024
+[2026-03-30 23:24:40,147][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:24:40,147][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:24:40,147][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:24:40,147][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:24:40,147][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:24:40,147][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:24:40,147][__main__][INFO] - position_val_classifier_gener : 0.875
+[2026-03-30 23:24:40,147][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:24:40,147][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:25:21,599][__main__][INFO] - Step 1537/5000, Training loss: 0.0009,  Regularization loss: 0.0010, Validation loss: 0.0014
+Output shape from conv layers 1024
+[2026-03-30 23:25:23,257][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:25:23,257][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:25:23,257][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:25:23,257][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:25:23,257][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:25:23,257][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:25:23,257][__main__][INFO] - position_val_classifier_gener : 0.625
+[2026-03-30 23:25:23,257][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:25:23,257][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:25:59,763][__main__][INFO] - Step 1793/5000, Training loss: 0.0007,  Regularization loss: 0.0008, Validation loss: 0.0011
+Output shape from conv layers 1024
+[2026-03-30 23:26:01,215][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:26:01,215][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:26:01,215][__main__][INFO] - primitive_val_classifier_gener: 0.8125
+[2026-03-30 23:26:01,215][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:26:01,215][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:26:01,215][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:26:01,215][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:26:01,215][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:26:01,215][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:26:42,614][__main__][INFO] - Step 2049/5000, Training loss: 0.0006,  Regularization loss: 0.0006, Validation loss: 0.0010
+Output shape from conv layers 1024
+[2026-03-30 23:26:44,182][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:26:44,182][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:26:44,182][__main__][INFO] - primitive_val_classifier_gener: 0.8125
+[2026-03-30 23:26:44,182][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:26:44,182][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:26:44,182][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:26:44,182][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:26:44,182][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:26:44,182][__main__][INFO] - optimal_n_clusters            : 8
+[2026-03-30 23:27:25,542][__main__][INFO] - Step 2305/5000, Training loss: 0.0005,  Regularization loss: 0.0005, Validation loss: 0.0009
+Output shape from conv layers 1024
+[2026-03-30 23:27:27,127][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:27:27,128][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:27:27,128][__main__][INFO] - primitive_val_classifier_gener: 0.75
+[2026-03-30 23:27:27,128][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:27:27,128][__main__][INFO] - color_val_classifier_gener    : 0.4375
+[2026-03-30 23:27:27,128][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:27:27,128][__main__][INFO] - position_val_classifier_gener : 0.8125
+[2026-03-30 23:27:27,128][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:27:27,128][__main__][INFO] - optimal_n_clusters            : 6
+[2026-03-30 23:28:04,149][__main__][INFO] - Step 2561/5000, Training loss: 0.0004,  Regularization loss: 0.0005, Validation loss: 0.0009
+Output shape from conv layers 1024
+[2026-03-30 23:28:05,560][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:28:05,560][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:28:05,560][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:28:05,560][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:28:05,560][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:28:05,560][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:28:05,560][__main__][INFO] - position_val_classifier_gener : 0.5625
+[2026-03-30 23:28:05,560][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:28:05,560][__main__][INFO] - optimal_n_clusters            : 8
+[2026-03-30 23:28:46,985][__main__][INFO] - Step 2817/5000, Training loss: 0.0004,  Regularization loss: 0.0004, Validation loss: 0.0009
+Output shape from conv layers 1024
+[2026-03-30 23:28:48,553][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:28:48,553][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:28:48,553][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:28:48,553][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:28:48,553][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:28:48,553][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:28:48,553][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:28:48,553][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:28:48,553][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:29:29,462][__main__][INFO] - Step 3073/5000, Training loss: 0.0003,  Regularization loss: 0.0004, Validation loss: 0.0008
+Output shape from conv layers 1024
+[2026-03-30 23:29:31,040][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:29:31,041][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:29:31,041][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:29:31,041][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:29:31,041][__main__][INFO] - color_val_classifier_gener    : 0.875
+[2026-03-30 23:29:31,041][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:29:31,041][__main__][INFO] - position_val_classifier_gener : 0.625
+[2026-03-30 23:29:31,041][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:29:31,041][__main__][INFO] - optimal_n_clusters            : 9
+[2026-03-30 23:30:08,512][__main__][INFO] - Step 3329/5000, Training loss: 0.0003,  Regularization loss: 0.0004, Validation loss: 0.0007
+Output shape from conv layers 1024
+[2026-03-30 23:30:09,854][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:30:09,854][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:30:09,854][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:30:09,854][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:30:09,854][__main__][INFO] - color_val_classifier_gener    : 0.5
+[2026-03-30 23:30:09,854][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:30:09,854][__main__][INFO] - position_val_classifier_gener : 0.5625
+[2026-03-30 23:30:09,854][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:30:09,854][__main__][INFO] - optimal_n_clusters            : 7
+[2026-03-30 23:30:51,165][__main__][INFO] - Step 3585/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0008
+Output shape from conv layers 1024
+[2026-03-30 23:30:52,846][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:30:52,846][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:30:52,846][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:30:52,846][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:30:52,846][__main__][INFO] - color_val_classifier_gener    : 0.8125
+[2026-03-30 23:30:52,846][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:30:52,846][__main__][INFO] - position_val_classifier_gener : 0.9375
+[2026-03-30 23:30:52,846][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:30:52,846][__main__][INFO] - optimal_n_clusters            : 8
+[2026-03-30 23:31:34,310][__main__][INFO] - Step 3841/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0008
+Output shape from conv layers 1024
+[2026-03-30 23:31:35,812][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:31:35,813][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:31:35,813][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:31:35,813][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:31:35,813][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:31:35,813][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:31:35,813][__main__][INFO] - position_val_classifier_gener : 0.875
+[2026-03-30 23:31:35,813][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:31:35,813][__main__][INFO] - optimal_n_clusters            : 4
+[2026-03-30 23:32:13,035][__main__][INFO] - Step 4097/5000, Training loss: 0.0003,  Regularization loss: 0.0003, Validation loss: 0.0007
+Output shape from conv layers 1024
+[2026-03-30 23:32:14,523][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:32:14,523][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:32:14,523][__main__][INFO] - primitive_val_classifier_gener: 0.875
+[2026-03-30 23:32:14,523][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:32:14,523][__main__][INFO] - color_val_classifier_gener    : 0.8125
+[2026-03-30 23:32:14,523][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:32:14,523][__main__][INFO] - position_val_classifier_gener : 0.9375
+[2026-03-30 23:32:14,523][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:32:14,523][__main__][INFO] - optimal_n_clusters            : 4
+[2026-03-30 23:32:55,937][__main__][INFO] - Step 4353/5000, Training loss: 0.0002,  Regularization loss: 0.0003, Validation loss: 0.0008
+Output shape from conv layers 1024
+[2026-03-30 23:32:57,540][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:32:57,540][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:32:57,540][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:32:57,540][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:32:57,541][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:32:57,541][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:32:57,541][__main__][INFO] - position_val_classifier_gener : 0.625
+[2026-03-30 23:32:57,541][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:32:57,541][__main__][INFO] - optimal_n_clusters            : 5
+[2026-03-30 23:33:39,247][__main__][INFO] - Step 4609/5000, Training loss: 0.0002,  Regularization loss: 0.0003, Validation loss: 0.0007
+Output shape from conv layers 1024
+[2026-03-30 23:33:40,823][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:33:40,824][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:33:40,824][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:33:40,824][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:33:40,824][__main__][INFO] - color_val_classifier_gener    : 0.75
+[2026-03-30 23:33:40,824][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:33:40,824][__main__][INFO] - position_val_classifier_gener : 0.75
+[2026-03-30 23:33:40,824][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:33:40,824][__main__][INFO] - optimal_n_clusters            : 4
+[2026-03-30 23:34:18,188][__main__][INFO] - Step 4865/5000, Training loss: 0.0002,  Regularization loss: 0.0002, Validation loss: 0.0006
+Output shape from conv layers 1024
+[2026-03-30 23:34:19,586][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:34:19,586][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:34:19,586][__main__][INFO] - primitive_val_classifier_gener: 0.9375
+[2026-03-30 23:34:19,586][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:34:19,586][__main__][INFO] - color_val_classifier_gener    : 0.8125
+[2026-03-30 23:34:19,586][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:34:19,586][__main__][INFO] - position_val_classifier_gener : 1.0
+[2026-03-30 23:34:19,586][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:34:19,586][__main__][INFO] - optimal_n_clusters            : 5
+[2026-03-30 23:34:41,832][__main__][INFO] - Step 5000/5000, Training loss: 0.0002,  Regularization loss: 0.0002, Validation loss: 0.0007
+Output shape from conv layers 1024
+[2026-03-30 23:34:43,437][__main__][INFO] - --- Classifier Metrics Metrics ---
+[2026-03-30 23:34:43,437][__main__][INFO] - primitive_train_classifier_gener: 1.0
+[2026-03-30 23:34:43,437][__main__][INFO] - primitive_val_classifier_gener: 1.0
+[2026-03-30 23:34:43,437][__main__][INFO] - color_train_classifier_gener  : 1.0
+[2026-03-30 23:34:43,437][__main__][INFO] - color_val_classifier_gener    : 0.9375
+[2026-03-30 23:34:43,437][__main__][INFO] - position_train_classifier_gener: 1.0
+[2026-03-30 23:34:43,437][__main__][INFO] - position_val_classifier_gener : 0.75
+[2026-03-30 23:34:43,437][__main__][INFO] - --- Clustering Metrics Metrics ---
+[2026-03-30 23:34:43,437][__main__][INFO] - optimal_n_clusters            : 4
+Output shape from conv layers 1024
+Optimal clusters: 4, silhouette scores: [0.21612 0.23698 0.28738 0.25094 0.25508 0.25674 0.26419 0.26397 0.2581  0.2417  0.23666 0.24144 0.24274 0.23393 0.23929 0.23735 0.22488 0.21007 0.21667 0.24583 0.24018 0.22721 0.23085]
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Cluster 0: orig=0.0003  lesioned=0.0038
+Output shape from conv layers 1024
+Cluster 1: orig=0.0003  lesioned=0.0019
+Output shape from conv layers 1024
+Cluster 2: orig=0.0003  lesioned=0.0015
+Output shape from conv layers 1024
+Cluster 3: orig=0.0003  lesioned=0.0011
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed2
+figures_4999/neuron_clusters/26-03-30-23-34-51.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed2
+figures_4999/neuron_clusters_lesion/26-03-30-23-34-52.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed2
+figures_4999/neuron_clusters_lesion_0_[1, 0, 1]/26-03-30-23-34-53.png
+Output shape from conv layers 1024
+Group 0 has [  0   2   3   4   6   8   9  11  13  16  17  18  19  20  23  27  29  32  38  39  41  43  46  47  51  54  58  59  60  64  70  73  74  80  81  85  86  95 100 102 104 106 107 108 111 122 123 126 129
+ 132 141 151 152 153 154 157 158 164 165 168 170 172 174 177 181 185 186 190 191 193 198 205 212 213 215 219 221 222 225 236 238 243 246 252 254 257 262 269 271 272 273 281 285 286 288 293 294 295
+ 299 300 301 303 304 305 308 309 311 316 321 322 323 328 329 335 336 337 339 342 343 348 351 352 354 356 358 359 361 370 378 381 382 385 388 394 397 399 401 403 405 407 412 414 420 430 431 435 438
+ 439 443 444 446 456 458 460 468 475 481 482 483 494 501 509] neurons
+Group 1 has [  1   5   7  12  24  28  30  31  34  36  37  42  49  50  52  63  66  71  76  78  82  87  89  91  92  94  98 105 109 113 114 115 117 118 120 121 124 125 133 134 135 136 139 140 142 143 144 147 149
+ 156 161 162 171 175 178 179 180 182 183 189 194 201 203 204 209 211 223 226 228 229 230 231 232 233 235 239 241 242 245 247 259 261 270 274 277 290 291 292 306 312 313 317 318 320 325 326 327 332
+ 333 338 344 350 360 368 371 374 375 376 377 384 387 390 395 402 409 413 416 418 419 421 426 427 429 433 434 440 447 453 454 455 462 463 464 465 470 472 474 480 485 490 491 492 495 498 499 504 506
+ 507 508 510] neurons
+Group 2 has [ 14  21  25  40  45  48  57  61  65  68  75  79  83  88 101 103 110 119 128 137 155 159 173 176 192 196 197 199 202 206 214 217 220 227 240 248 250 263 264 266 268 282 296 314 324 330 331 334 345
+ 353 363 364 367 369 379 380 386 393 398 406 408 411 422 428 432 436 441 442 449 451 459 461 467 469 473 476 477 484 486 488 493 496 497 502 505] neurons
+Group 3 has [ 15  22  33  62  67  77  90  93  97 112 127 138 145 167 169 195 200 224 234 244 256 258 275 276 280 302 310 349 365 391 392 396 400 404 410 415 417 437 450 457 466 471 478 500 503] neurons
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed2
+figures_4999/context_weights_heatmaps/26-03-30-23-34-55.png
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+Output shape from conv layers 1024
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed2
+figures_4999/mean_cluster_activity_[[1, 0, 1], [0, 1, 1]]/26-03-30-23-34-59.png
+/home/ghb24/paper_git/er/comp_predictive_learning/revieww/contextual_full_1_0.8/sketch_6/['white', 'red', 'green', 'blue']/[1]/False/[1]_512_128_128_64_16/['next_primitive_offset', 'next_color_offset', 'next_position_offset', 'next_scale_offset']/[0, 1]/[0]/[0, 1]/[0, 1]/ae_pred/conv_[16, 16, 16]_relu_none_False_512/rnn_512_relu_1_False_eye_0.05/conv_[16, 16, 16]_relu_none/True/5000_0.001_0.001_0.01_0_0_128/seed2
+figures_4999/global_cluster_correlation/26-03-30-23-35-00.png
+[2026-03-30 23:35:01,460][__main__][INFO] - Saved model at step 4999.
+[2026-03-30 23:35:01,582][__main__][INFO] - Training completed after 5000 steps.

@@ -32,14 +32,19 @@ class RNNAE(nn.Module):
         rnn_out = self.rnn(cnn_encoded)
         return self.decoder(rnn_out),cnn_encoded,rnn_out,None
     
+    def forward_and_block_rnn_input_after_timestep(self, input:Tensor, block_after_timestep:int):
+        cnn_encoded = self.encoder(input)
+        cnn_encoded[block_after_timestep:] = 0
+        rnn_out = self.rnn(cnn_encoded)
+        return self.decoder(rnn_out),cnn_encoded,rnn_out,None
+    
+    
     def jacobian_of_rnn_hidden_to_last_hidden(self, x):
         cnn_encoded = self.encoder(x)
         print(jacobian_hnext_wrt_h_for_sequence(self.rnn, cnn_encoded).shape)
         return jacobian_hnext_wrt_h_for_sequence(self.rnn, cnn_encoded)
         
-    
-    def loss(self, data):
-        outputs,cnn_encoded,rnn_out,enc_context = self(data)
+    def compute_loss(self, outputs, data, start_timestep=0):
         if self.type == "pred":
             context_offset = 1 #time needed for the model to integrate inputs and know the context
             labels = data[context_offset+self.pred_offset:]
@@ -51,10 +56,22 @@ class RNNAE(nn.Module):
         else:
             labels = data
             
-        loss = self.loss_fn(outputs,labels)
-                
+        if start_timestep > 0:
+            labels = labels[start_timestep:]
+            outputs = outputs[start_timestep:]
+                            
+        return self.loss_fn(outputs,labels)
+    
+    def loss(self, data):
+        outputs,cnn_encoded,rnn_out,enc_context = self(data)
+        loss = self.compute_loss(outputs, data)                
         return loss, cnn_encoded,rnn_out,enc_context
-
+    
+    def loss_when_blocking_input_after_timestep(self, data, block_after_timestep):
+        outputs,cnn_encoded,rnn_out,enc_context = self.forward_and_block_rnn_input_after_timestep(data, block_after_timestep)
+        loss = self.compute_loss(outputs, data,block_after_timestep)                
+        return loss, cnn_encoded,rnn_out,enc_context
+    
     def create_lesioned_instance(self,indices_to_lesion):
         new_network = self.create_new_instance()
         new_network.rnn.weight_hh.weight.data[:,indices_to_lesion] = 0

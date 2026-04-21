@@ -1,6 +1,9 @@
 import torch 
 from sklearn.svm import LinearSVC
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 
 def unpack_batch(batch):
     if len(batch) == 3:
@@ -32,7 +35,10 @@ def disentanglement_metric(
 
     train_activities, train_latents = get_activity_and_labels_b(train_loader)
     val_activities, val_latents = get_activity_and_labels_b(val_loader)
-    classifier =  LinearSVC(max_iter=5000,penalty="l1",C=10,random_state=0)
+    classifier = make_pipeline(
+        LinearSVC(max_iter=5000,penalty="l1",C=10,random_state=0),
+    )
+
     classifier.fit(train_activities.numpy(), train_latents[:,idx_to_classify].cpu().numpy())
     train_acc = classifier.score(train_activities.numpy(), train_latents[:,idx_to_classify].cpu().numpy())
     val_acc = classifier.score(val_activities.numpy(), val_latents[:,idx_to_classify].cpu().numpy())

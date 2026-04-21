@@ -71,7 +71,7 @@ class TransitionShapes3D(Dataset):
                 task_abstract_latent="shape",
                 subsample_task_abstract=1.0,
                 task_abstract_train_set=True,
-                # OPTIONAL: add subsampling knobs like dsprites (can default to 1)
+                # OPTIONAL: add subsampling knobs  (can default to 1)
                 subsample_floor=1.0,
                 subsample_wall=1.0,
                 subsample_object=1.0,
@@ -127,7 +127,7 @@ class TransitionShapes3D(Dataset):
             image_transforms.insert(0, trans.Lambda(rgb2hsv))
         self.transform = trans.Compose(image_transforms)
 
-        # 2) Build possible_values (subsample + one-value constraint), like dsprites
+        # 2) Build possible_values (subsample + one-value constraint)
         self.possible_values = {}
         for f in self.factors:
             vals = self.unique_values[f]
@@ -164,7 +164,7 @@ class TransitionShapes3D(Dataset):
                 sampling_factor=subsample_task_abstract)
             self.num_seq = len(self.episodes_indices)
 
-        # 4) Local -> Global mapping (like dsprites)
+        # 4) Local -> Global mapping
         local_to_global = {}
         for f in self.factors:
             local_vals  = self.possible_values[f]

@@ -4,8 +4,8 @@ import numpy as np
 from .contextual_concat import ContextualConcatenator,ConcatExclusiveSampler,InfiniteConcatExclusiveSampler,InfiniteSampler
 from .contextual_sketch import make_sketch_loader,make_contextual_sketch_collate
 from .contextual_sketch import make_dataset as make_dataset_contextual_sketch
+from .contextual_sketch import LATENT_ORDER as SKETCH_LATENT_ORDER
 from .structured_context_generator import create_structured_contexts
-from .dsprites import make_DSprites_loader, make_DSprites_collate_fn, load_raw as load_raw_dsprites,make_dataset as make_dataset_contextual_dsprites, TransitionDSprites
 from .dddshapes import make_DDDShapes_collate_fn, make_dataset as make_dataset_contextual_dddshapes, TransitionShapes3D, load_raw as load_raw_dddshapes, make_dddshapes_loader
 
 def worker_init_fn(worker_id):                                                                                                                                
@@ -32,18 +32,6 @@ def make_contextual_loader(config,
     if "sketch" in config.dataset.name:
         datasets,context_vectors = make_sketch_loader(config,context_vals,context_vector_size,context_start_idx,num_sample_per_context,put_in_dict)
         collate_fn = make_contextual_sketch_collate("cuda" if torch.cuda.is_available() else "cpu")
-    elif "dsprites" in config.dataset.name:
-        datasets,context_vectors = make_DSprites_loader(config,
-                                                         context_vals,
-                                                         context_vector_size,
-                                                         context_start_idx,
-                                                         num_sample_per_context,
-                                                         put_in_dict,
-                                                         imgs = kwargs.get("imgs",None),
-                                                         factor_values= kwargs.get("factor_values",None),
-                                                         factor_classes= kwargs.get("factor_classes",None))
-         
-        collate_fn = make_DSprites_collate_fn("cuda" if torch.cuda.is_available() else "cpu")
     elif "dddshapes" in config.dataset.name:
         datasets,context_vectors = make_dddshapes_loader(config,
                                                          context_vals,
@@ -144,7 +132,7 @@ def make_sketch_dataloaders(config):
     classification_metric_train_loaders = {}
     classification_metric_val_loaders = {}
     latents = []
-    for lat_idx, lat in enumerate(["primitive","scale","color","position"]):
+    for lat_idx, lat in enumerate(SKETCH_LATENT_ORDER):
         if lat == "scale":
             if len(config.dataset.scales) == 1:
                 continue 
@@ -161,59 +149,6 @@ def make_sketch_dataloaders(config):
     return pretrain_loader, val_loader, smaller_pretrain_loader,analysis_loader, classification_metric_train_loaders, classification_metric_val_loaders,latents,train_contexts,val_contexts
 
 
-def make_dsprites_dataloaders(config):
-    train_contexts,val_contexts = create_structured_contexts(config)
-    ddd_imgs, factor_values, factor_classes = load_raw_dsprites(config.dataset.path)
-    context_size = 3
-    pretrain_loader = make_contextual_loader(config,train_contexts,config.dataset.num_train_sequences_per_context,context_size,0,infinite_stream=True,shuffle=True,
-                                            imgs=ddd_imgs,
-                                            factor_values=factor_values,
-                                            factor_classes=factor_classes)
-    val_loader = make_contextual_loader(config,val_contexts,config.dataset.num_val_sequences_per_context,context_size,len(train_contexts),shuffle=False,
-                                                imgs=ddd_imgs,
-                                                factor_values=factor_values,
-                                                factor_classes=factor_classes)  
-    smaller_pretrain_loader = make_contextual_loader(config,train_contexts,config.train_loop.batch_size,context_size,0,shuffle=False,
-                                                imgs=ddd_imgs,
-                                                factor_values=factor_values,
-                                                factor_classes=factor_classes)
-    
-    def make_abstract_loader(train_or_val,test_latent):
-        ds = make_dataset_contextual_dsprites(1,config,
-                                            imgs=ddd_imgs,
-                                            factor_values=factor_values,
-                                            factor_classes=factor_classes,
-                                            task_abstract=True,task_abstract_train_set=train_or_val,task_abstract_latent=test_latent)
-        loader = torch.utils.data.DataLoader(ds,
-                                            batch_size=config.train_loop.batch_size,
-                                            num_workers=0,
-                                            shuffle=False,
-                                            pin_memory=False)
-        return loader
-    # latents = TransitionDSprites.factors
-
-    classification_metric_train_loaders = {}
-    classification_metric_val_loaders = {}
-    assert len(config.dataset.task_disentanglement_num_timesteps) == 1, "DSprites disentanglement only supports one timestep for now"
-    latents = [lat for lat in TransitionDSprites.factors if not config.dataset["one_"+lat]]
-    latents_idx = {}
-    for idx, lat in enumerate(TransitionDSprites.factors):
-        latents_idx[lat] = idx
-    
-    print("Latents for dsprites disentanglement:", latents,latents_idx)
-    classification_metric_train_loaders = {}
-    classification_metric_val_loaders = {}
-    for  lat in (latents):
-        lat_idx = latents_idx[lat]
-        classification_metric_train_loaders[lat] = (make_abstract_loader(True,lat),lat_idx) 
-        classification_metric_val_loaders[lat] = (make_abstract_loader(False,lat),lat_idx) 
-
-    print("Not onel aten ts", latents)
-    all_contexts = train_contexts + val_contexts
-    analysis_loader = make_contextual_loader(config=config,dataset_name="dsprites",context_vals=all_contexts,num_sample_per_context=128,context_vector_size=context_size,context_start_idx=0,shuffle=False)
-    
-    return pretrain_loader, val_loader, smaller_pretrain_loader,analysis_loader ,classification_metric_train_loaders, classification_metric_val_loaders,latents, train_contexts,val_contexts
-
 
 import torch
 
@@ -221,7 +156,7 @@ def make_dddshapes_dataloaders(config):
     train_contexts, val_contexts = create_structured_contexts(config)
 
     ddd_imgs, factor_values, factor_classes = load_raw_dddshapes(config.dataset.path)  # 3DShapes loader
-    # context_size should match how you encode contexts (same role as dsprites' context_size=3)
+    # context_size should match how you encode contexts
     context_size = len(config.dataset.contexts)
 
     pretrain_loader = make_contextual_loader(
@@ -261,7 +196,7 @@ def make_dddshapes_dataloaders(config):
         factor_classes=factor_classes
     )
 
-    # --- abstract loaders (disentanglement/classification metrics), dsprites-style ---
+    # --- abstract loaders (disentanglement/classification metrics)
     def make_abstract_loader(train_or_val, test_latent):
         ds = make_dataset_contextual_dddshapes(
             1,
